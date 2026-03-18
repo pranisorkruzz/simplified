@@ -24,4 +24,5 @@ export interface Task {
   order_index: number;
   completed: boolean;
   created_at: string;
+  deadline_at: string | null;
 }
