@@ -22,44 +22,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // Fetch user profile from database
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = async (userId: string): Promise<Profile | null> => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle();
 
-    if (!error && data) {
-      setProfile(data);
+    if (error) {
+      throw error;
     }
+
+    return data;
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-      }
-      setLoading(false);
-    });
+    const syncAuthState = async (nextSession: Session | null) => {
+      setLoading(true);
+      setSession(nextSession);
+      setUser(nextSession?.user ?? null);
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        (async () => {
-          setSession(session);
-          setUser(session?.user ?? null);
-          if (session?.user) {
-            await fetchProfile(session.user.id);
-          } else {
-            setProfile(null);
-          }
-        })();
+      if (nextSession?.user) {
+        const nextProfile = await fetchProfile(nextSession.user.id);
+        setProfile(nextProfile);
+      } else {
+        setProfile(null);
       }
-    );
+
+      setLoading(false);
+    };
+
+    supabase.auth
+      .getSession()
+      .then(({ data: { session } }) => syncAuthState(session))
+      .catch(() => setLoading(false));
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      void syncAuthState(nextSession).catch(() => setLoading(false));
+    });
 
     return () => subscription.unsubscribe();
   }, []);

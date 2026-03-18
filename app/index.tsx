@@ -1,23 +1,21 @@
-import { useEffect } from 'react';
+import { Redirect } from 'expo-router';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 
 export default function Index() {
   const { session, profile, loading } = useAuth();
-  const router = useRouter();
 
-  useEffect(() => {
-    if (!loading) {
-      if (!session) {
-        router.replace('/login');
-      } else if (!profile) {
-        router.replace('/onboarding');
-      } else {
-        router.replace('/(tabs)');
-      }
+  if (!loading) {
+    if (!session) {
+      return <Redirect href="/login" />;
     }
-  }, [loading, session, profile]);
+
+    if (!profile) {
+      return <Redirect href="/onboarding" />;
+    }
+
+    return <Redirect href="/(tabs)" />;
+  }
 
   return (
     <View style={styles.container}>

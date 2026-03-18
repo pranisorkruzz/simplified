@@ -4,19 +4,38 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
+  ActivityIndicator,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import { GraduationCap, Briefcase } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function OnboardingScreen() {
   const [selected, setSelected] = useState<'student' | 'professional' | null>(
     null
   );
   const [loading, setLoading] = useState(false);
-  const { updateProfile } = useAuth();
+  const { user, profile, loading: authLoading, updateProfile } = useAuth();
   const router = useRouter();
+
+  if (authLoading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#007AFF" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!user) {
+    return <Redirect href="/login" />;
+  }
+
+  if (profile) {
+    return <Redirect href="/(tabs)" />;
+  }
 
   const handleContinue = async () => {
     if (!selected) return;
@@ -37,11 +56,11 @@ export default function OnboardingScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
         <Text style={styles.title}>Welcome!</Text>
-        <Text style={styles.subtitle}>
-          Let's personalize your experience
-        </Text>
+        <Text style={styles.subtitle}>Let us personalize your experience</Text>
 
-        <Text style={styles.question}>Are you a Student or Working Professional?</Text>
+        <Text style={styles.question}>
+          Are you a Student or Working Professional?
+        </Text>
 
         <View style={styles.optionsContainer}>
           <TouchableOpacity
@@ -113,6 +132,11 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 24,
+    justifyContent: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
   },
   title: {

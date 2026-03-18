@@ -3,11 +3,11 @@ import {
   Text,
   TouchableOpacity,
   StyleSheet,
-  SafeAreaView,
   ScrollView,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Crown, Check, X } from 'lucide-react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 export default function PaywallScreen() {
   const router = useRouter();
