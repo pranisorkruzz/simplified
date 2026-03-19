@@ -34,7 +34,6 @@ import {
   supabase,
 } from '@/lib/supabase';
 import TaskCard, { TaskRow } from '@/components/TaskCard';
-import TasksHero from '@/components/TasksHero';
 import DeadlineModal from '@/components/DeadlineModal';
 import { formatDeadlineInputValue, parseManualDeadlineInput } from '@/utils/formatters';
 
@@ -387,9 +386,6 @@ export default function TasksScreen() {
 
   const activeTasks = tasks.filter((task) => !task.completed);
   const finishedTasks = tasks.filter((task) => task.completed);
-  const totalCount = tasks.length;
-  const completionRate =
-    totalCount === 0 ? 0 : Math.round((finishedTasks.length / totalCount) * 100);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -411,13 +407,6 @@ export default function TasksScreen() {
           />
         }
       >
-        <TasksHero
-          activeCount={activeTasks.length}
-          finishedCount={finishedTasks.length}
-          totalCount={totalCount}
-          completionRate={completionRate}
-        />
-
         {screenError ? (
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{screenError}</Text>

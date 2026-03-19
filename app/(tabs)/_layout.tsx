@@ -1,16 +1,15 @@
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CheckSquare,
   MessageSquare,
   User,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
+import FloatingTabBar from '@/components/FloatingTabBar';
 
 export default function TabLayout() {
   const { session, profile, loading } = useAuth();
-  const insets = useSafeAreaInsets();
 
   if (loading) {
     return (
@@ -30,20 +29,12 @@ export default function TabLayout() {
 
   return (
     <Tabs
+      tabBar={(props) => <FloatingTabBar {...props} />}
       screenOptions={{
         headerShown: false,
+        animation: 'shift',
         tabBarActiveTintColor: '#F6D8AB',
         tabBarInactiveTintColor: '#9FB5AD',
-        tabBarStyle: [
-          styles.tabBar,
-          {
-            bottom: Math.max(insets.bottom, 10) + 8,
-            height: 62 + Math.max(insets.bottom, 8),
-            paddingBottom: Math.max(insets.bottom, 8),
-          },
-        ],
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarItemStyle: styles.tabItem,
       }}
     >
       <Tabs.Screen
@@ -81,28 +72,5 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F4EFE6',
-  },
-  tabBar: {
-    position: 'absolute',
-    left: 18,
-    right: 18,
-    borderRadius: 24,
-    borderTopWidth: 0,
-    backgroundColor: '#102D24',
-    paddingTop: 8,
-    shadowColor: '#0D231C',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.16,
-    shadowRadius: 24,
-    elevation: 18,
-  },
-  tabLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.2,
-    marginTop: 2,
-  },
-  tabItem: {
-    borderRadius: 18,
   },
 });
