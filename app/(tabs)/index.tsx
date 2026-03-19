@@ -27,11 +27,8 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  EmailBrief,
-  parseEmailBrief,
-  summarizeEmailToBrief,
-} from '@/lib/gemini';
+import { createBriefFromEmail } from '@/lib/gemini';
+import { EmailBrief, readBriefFromRecord } from '@/lib/briefs';
 import {
   getSupabaseErrorMessage,
   isMissingColumnError,
@@ -45,17 +42,83 @@ type BriefCard = EmailBrief & {
 };
 
 async function fetchBriefsData(userId: string) {
-  const [{ data: chatsData, error: chatsError }, { data: tasksData }] =
-    await Promise.all([
-      supabase
-        .from('chats')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false }),
-      supabase.from('tasks').select('chat_id, completed').eq('user_id', userId),
-    ]);
+  const baseChatsQuery = await supabase
+    .from('chats')
+    .select('id, role, message, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+
+  const tasksQuery = await supabase
+    .from('tasks')
+    .select('chat_id, completed')
+    .eq('user_id', userId);
+
+  if (baseChatsQuery.error) {
+    return {
+      chatsData: null,
+      chatsError: baseChatsQuery.error,
+      tasksData: tasksQuery.data,
+    };
+  }
+
+  const briefPayloadQuery = await supabase
+    .from('chats')
+    .select('id, brief_payload')
+    .eq('user_id', userId);
+
+  const briefPayloadById = isMissingColumnError(
+    briefPayloadQuery.error,
+    'brief_payload'
+  )
+    ? new Map<string, unknown | null>()
+    : new Map(
+        (briefPayloadQuery.data ?? []).map((chat) => [chat.id, chat.brief_payload])
+      );
+
+  const chatsData = (baseChatsQuery.data ?? []).map((chat) => ({
+    ...chat,
+    brief_payload: briefPayloadById.get(chat.id) ?? null,
+  }));
+  const chatsError =
+    briefPayloadQuery.error &&
+    !isMissingColumnError(briefPayloadQuery.error, 'brief_payload')
+      ? briefPayloadQuery.error
+      : null;
+  const tasksData = tasksQuery.data;
 
   return { chatsData, chatsError, tasksData };
+}
+
+function mapBriefCards(
+  chatsData: {
+    id: string;
+    role: string;
+    message: string;
+    brief_payload?: unknown | null;
+    created_at: string;
+  }[],
+  linkedTaskIds: Set<string>
+) {
+  return chatsData
+    .map((chat) => {
+      if (chat.role !== 'assistant') {
+        return null;
+      }
+
+      const brief = readBriefFromRecord(chat);
+
+      if (!brief) {
+        return null;
+      }
+
+      return {
+        ...brief,
+        id: chat.id,
+        createdAt: chat.created_at,
+        addedToTasks: linkedTaskIds.has(chat.id),
+      } satisfies BriefCard;
+    })
+    .filter((brief): brief is BriefCard => Boolean(brief));
 }
 
 async function insertTasksForBrief(userId: string, brief: BriefCard) {
@@ -316,26 +379,7 @@ export default function BriefsScreen() {
         .filter((chatId): chatId is string => Boolean(chatId)),
     );
 
-    const nextBriefs = (chatsData ?? [])
-      .map((chat) => {
-        if (chat.role !== 'assistant') {
-          return null;
-        }
-
-        const brief = parseEmailBrief(chat.message);
-
-        if (!brief) {
-          return null;
-        }
-
-        return {
-          ...brief,
-          id: chat.id,
-          createdAt: chat.created_at,
-          addedToTasks: linkedTaskIds.has(chat.id),
-        } satisfies BriefCard;
-      })
-      .filter((brief): brief is BriefCard => Boolean(brief));
+    const nextBriefs = mapBriefCards(chatsData ?? [], linkedTaskIds);
 
     setBriefs(nextBriefs);
     setTaskStats({
@@ -377,26 +421,7 @@ export default function BriefsScreen() {
           .filter((chatId): chatId is string => Boolean(chatId)),
       );
 
-      const nextBriefs = (chatsData ?? [])
-        .map((chat) => {
-          if (chat.role !== 'assistant') {
-            return null;
-          }
-
-          const brief = parseEmailBrief(chat.message);
-
-          if (!brief) {
-            return null;
-          }
-
-          return {
-            ...brief,
-            id: chat.id,
-            createdAt: chat.created_at,
-            addedToTasks: linkedTaskIds.has(chat.id),
-          } satisfies BriefCard;
-        })
-        .filter((brief): brief is BriefCard => Boolean(brief));
+      const nextBriefs = mapBriefCards(chatsData ?? [], linkedTaskIds);
 
       setBriefs(nextBriefs);
       setTaskStats({
@@ -424,34 +449,7 @@ export default function BriefsScreen() {
 
     try {
       const sourceEmail = draftEmail.trim();
-
-      const { error: userChatError } = await supabase.from('chats').insert({
-        user_id: user.id,
-        message: sourceEmail,
-        role: 'user',
-        file_urls: [],
-      });
-
-      if (userChatError) {
-        throw userChatError;
-      }
-
-      const brief = await summarizeEmailToBrief(sourceEmail);
-
-      const { data: assistantChat, error: assistantChatError } = await supabase
-        .from('chats')
-        .insert({
-          user_id: user.id,
-          message: JSON.stringify(brief),
-          role: 'assistant',
-          file_urls: [],
-        })
-        .select()
-        .single();
-
-      if (assistantChatError) {
-        throw assistantChatError;
-      }
+      const { brief, assistantChat } = await createBriefFromEmail(sourceEmail);
 
       setBriefs((prev) => [
         {

@@ -9,7 +9,10 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string
+  ) => Promise<{ emailConfirmationRequired: boolean }>;
   signOut: () => Promise<void>;
   updateProfile: (userType: 'student' | 'professional') => Promise<void>;
 }
@@ -75,11 +78,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     });
     if (error) throw error;
+
+    return {
+      emailConfirmationRequired: !data.session,
+    };
   };
 
   const signOut = async () => {
