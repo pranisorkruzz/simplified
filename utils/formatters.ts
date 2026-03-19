@@ -1,4 +1,4 @@
-import { EmailBrief } from '@/lib/gemini';
+import { EmailBrief } from '@/lib/briefs';
 
 export function getPriorityColors(priority: EmailBrief['priority'] | undefined) {
   switch (priority) {
