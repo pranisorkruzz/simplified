@@ -14,7 +14,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react-native';
-import { EmailBrief } from '@/lib/gemini';
+import { EmailBrief } from '@/lib/briefs';
 import { Task } from '@/types/database';
 import {
   getPriorityColors,
@@ -25,7 +25,7 @@ import {
 } from '@/utils/formatters';
 
 export type TaskRow = Task & {
-  chat?: { message: string } | { message: string }[] | null;
+  chat?: { message: string; brief_payload?: unknown | null } | null;
   brief: EmailBrief | null;
 };
 

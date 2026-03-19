@@ -1,3 +1,5 @@
+import type { EmailBrief } from '@/lib/briefs';
+
 export type UserType = 'student' | 'professional';
 
 export interface Profile {
@@ -13,6 +15,7 @@ export interface Chat {
   message: string;
   role: 'user' | 'assistant';
   file_urls?: string[];
+  brief_payload: EmailBrief | null;
   created_at: string;
 }
 

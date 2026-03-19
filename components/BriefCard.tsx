@@ -15,7 +15,7 @@ import {
   Clock3,
   Plus,
 } from 'lucide-react-native';
-import { EmailBrief } from '@/lib/gemini';
+import { EmailBrief } from '@/lib/briefs';
 import { getPriorityColors, formatTimeLeft } from '@/utils/formatters';
 
 export type BriefCardType = EmailBrief & {

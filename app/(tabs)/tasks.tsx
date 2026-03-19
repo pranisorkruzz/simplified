@@ -27,7 +27,7 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { EmailBrief, parseEmailBrief } from '@/lib/gemini';
+import { EmailBrief, readBriefFromRecord } from '@/lib/briefs';
 import {
   getSupabaseErrorMessage,
   isMissingColumnError,
@@ -50,7 +50,7 @@ if (
 }
 
 async function fetchTasksData(userId: string) {
-  const deadlineQuery = await supabase
+  const tasksWithDeadlineQuery = await supabase
     .from('tasks')
     .select(
       'id, user_id, chat_id, title, order_index, completed, created_at, deadline_at, chat:chats(message)'
@@ -59,36 +59,106 @@ async function fetchTasksData(userId: string) {
     .order('created_at', { ascending: false })
     .order('order_index', { ascending: true });
 
-  if (!deadlineQuery.error) {
+  const tasksWithoutDeadlineQuery = isMissingColumnError(
+    tasksWithDeadlineQuery.error,
+    'deadline_at'
+  )
+    ? await supabase
+        .from('tasks')
+        .select(
+          'id, user_id, chat_id, title, order_index, completed, created_at, chat:chats(message)'
+        )
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+        .order('order_index', { ascending: true })
+    : null;
+
+  const baseTasksData = tasksWithDeadlineQuery.data
+    ? tasksWithDeadlineQuery.data
+    : (tasksWithoutDeadlineQuery?.data ?? []).map((task) => ({
+        ...task,
+        deadline_at: null,
+      }));
+
+  const baseTasksError =
+    tasksWithDeadlineQuery.error &&
+    !isMissingColumnError(tasksWithDeadlineQuery.error, 'deadline_at')
+      ? tasksWithDeadlineQuery.error
+      : tasksWithoutDeadlineQuery?.error ?? null;
+
+  if (baseTasksError) {
     return {
-      ...deadlineQuery,
-      deadlineFeatureAvailable: true,
+      data: null,
+      error: baseTasksError,
+      deadlineFeatureAvailable: !isMissingColumnError(
+        tasksWithDeadlineQuery.error,
+        'deadline_at'
+      ),
     };
   }
 
-  if (!isMissingColumnError(deadlineQuery.error, 'deadline_at')) {
-    return {
-      ...deadlineQuery,
-      deadlineFeatureAvailable: true,
-    };
-  }
-
-  const fallbackQuery = await supabase
-    .from('tasks')
-    .select(
-      'id, user_id, chat_id, title, order_index, completed, created_at, chat:chats(message)'
+  const chatIds = Array.from(
+    new Set(
+      (baseTasksData ?? [])
+        .map((task) => task.chat_id)
+        .filter((chatId): chatId is string => Boolean(chatId))
     )
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .order('order_index', { ascending: true });
+  );
+
+  if (chatIds.length === 0) {
+    return {
+      data: baseTasksData,
+      error: null,
+      deadlineFeatureAvailable: !isMissingColumnError(
+        tasksWithDeadlineQuery.error,
+        'deadline_at'
+      ),
+    };
+  }
+
+  const briefPayloadQuery = await supabase
+    .from('chats')
+    .select('id, brief_payload')
+    .in('id', chatIds);
+
+  const briefPayloadByChatId = isMissingColumnError(
+    briefPayloadQuery.error,
+    'brief_payload'
+  )
+    ? new Map<string, unknown | null>()
+    : new Map(
+        (briefPayloadQuery.data ?? []).map((chat) => [chat.id, chat.brief_payload])
+      );
+
+  const data = (baseTasksData ?? []).map((task) => {
+    const chatRecord = Array.isArray(task.chat) ? task.chat[0] : task.chat;
+
+    return {
+      ...task,
+      chat: chatRecord
+        ? {
+            ...chatRecord,
+            brief_payload: task.chat_id
+              ? briefPayloadByChatId.get(task.chat_id) ?? null
+              : null,
+          }
+        : null,
+    };
+  });
+
+  const error =
+    briefPayloadQuery.error &&
+    !isMissingColumnError(briefPayloadQuery.error, 'brief_payload')
+      ? briefPayloadQuery.error
+      : null;
 
   return {
-    data: (fallbackQuery.data ?? []).map((task) => ({
-      ...task,
-      deadline_at: null,
-    })),
-    error: fallbackQuery.error,
-    deadlineFeatureAvailable: false,
+    data,
+    error,
+    deadlineFeatureAvailable: !isMissingColumnError(
+      tasksWithDeadlineQuery.error,
+      'deadline_at'
+    ),
   };
 }
 
@@ -96,13 +166,9 @@ async function fetchTasksData(userId: string) {
 
 function mapTaskRows(data: any[]): TaskRow[] {
   return data.map((task: any) => {
-    const chatMessage = Array.isArray(task.chat)
-      ? task.chat[0]?.message
-      : task.chat?.message;
-
     return {
       ...task,
-      brief: chatMessage ? parseEmailBrief(chatMessage) : null,
+      brief: task.chat ? readBriefFromRecord(task.chat) : null,
     } as TaskRow;
   });
 }

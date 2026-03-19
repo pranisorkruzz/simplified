@@ -5,6 +5,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   ActivityIndicator,
+  Alert,
 } from 'react-native';
 import { Redirect, useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,7 +47,7 @@ export default function OnboardingScreen() {
       router.replace('/(tabs)');
     } catch (error) {
       console.error('Error updating profile:', error);
-      alert('Failed to save profile. Please try again.');
+      Alert.alert('Save failed', 'Failed to save profile. Please try again.');
     } finally {
       setLoading(false);
     }
