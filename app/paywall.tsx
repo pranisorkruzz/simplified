@@ -1,32 +1,50 @@
 import {
-  View,
+  Alert,
+  ScrollView,
+  StyleSheet,
   Text,
   TouchableOpacity,
-  StyleSheet,
-  ScrollView,
-  Platform,
+  View,
 } from 'react-native';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
-import { X, Check, Sparkles } from 'lucide-react-native';
+import { Check, Sparkles, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+
+const PRIMARY_BRAND = '#0F4737';
+const ACCENT_GOLD = '#D7B989';
 
 export default function PaywallScreen() {
   const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>('yearly');
+  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>(
+    'yearly'
+  );
+
+  const showBillingPreview = () => {
+    Alert.alert(
+      'Billing not wired yet',
+      'The paywall UI is ready, but checkout, restore purchases, terms, and privacy links still need real integrations.'
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <View style={{flex: 1}} />
-        <TouchableOpacity style={styles.closeButton} onPress={() => router.back()}>
+        <View style={styles.headerSpacer} />
+        <TouchableOpacity
+          style={styles.closeButton}
+          onPress={() => router.back()}
+        >
           <X size={20} color="#999" />
         </TouchableOpacity>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+      >
         <View style={styles.appIconContainer}>
-          <Sparkles size={40} color="#0F4737" />
+          <Sparkles size={40} color={PRIMARY_BRAND} />
         </View>
 
         <View style={styles.titleWrapper}>
@@ -38,26 +56,31 @@ export default function PaywallScreen() {
         </Text>
 
         <View style={styles.awardContainer}>
-          <Text style={styles.laurel}>🌿</Text>
+          <Text style={styles.laurel}>*</Text>
           <View style={styles.awardTextContainer}>
-            <Text style={styles.awardTextSmall}>The Download</Text>
-            <Text style={styles.awardTextBold}>Productivity App</Text>
-            <Text style={styles.awardTextSmall}>of the Year 2025</Text>
+            <Text style={styles.awardTextSmall}>Subscription Preview</Text>
+            <Text style={styles.awardTextBold}>Clarix Pro</Text>
+            <Text style={styles.awardTextSmall}>
+              Billing integration still required
+            </Text>
           </View>
-          <Text style={styles.laurel}>🌿</Text>
+          <Text style={styles.laurel}>*</Text>
         </View>
 
         <View style={styles.testimonialCard}>
           <Text style={styles.testimonialTitle}>Task whisperer in your pocket</Text>
           <View style={styles.starsContainer}>
-            {'★★★★★'.split('').map((star, i) => (
-              <Text key={i} style={styles.star}>{star}</Text>
+            {'*****'.split('').map((star, index) => (
+              <Text key={index} style={styles.star}>
+                {star}
+              </Text>
             ))}
           </View>
           <Text style={styles.testimonialText}>
-            Never understood how to manage my chaotic life until Clarix automatically broke everything down into simple steps. Now I'm shipping daily!
+            Clarix takes vague work, turns it into a simple plan, and makes it
+            obvious what to do next.
           </Text>
-          <Text style={styles.testimonialAuthor}>MakerSarah</Text>
+          <Text style={styles.testimonialAuthor}>Product preview copy</Text>
         </View>
 
         <View style={styles.paginationContainer}>
@@ -68,43 +91,91 @@ export default function PaywallScreen() {
 
         <View style={styles.pricingContainer}>
           <TouchableOpacity
-            style={[styles.pricingCard, selectedPlan === 'monthly' && styles.pricingCardActive]}
+            style={[
+              styles.pricingCard,
+              selectedPlan === 'monthly' && styles.pricingCardActive,
+            ]}
             activeOpacity={0.9}
             onPress={() => setSelectedPlan('monthly')}
           >
-            {selectedPlan === 'monthly' && (
+            {selectedPlan === 'monthly' ? (
               <View style={styles.checkBadge}>
                 <Check size={14} color={PRIMARY_BRAND} strokeWidth={3} />
               </View>
-            )}
-            <Text style={[styles.pricingPeriod, selectedPlan === 'monthly' && styles.textWhite]}>1</Text>
-            <Text style={[styles.pricingLabel, selectedPlan === 'monthly' && styles.textWhite]}>MONTH</Text>
-            <Text style={[styles.pricingPrice, selectedPlan === 'monthly' && styles.textWhite]}>$6.99</Text>
+            ) : null}
+            <Text
+              style={[
+                styles.pricingPeriod,
+                selectedPlan === 'monthly' && styles.textWhite,
+              ]}
+            >
+              1
+            </Text>
+            <Text
+              style={[
+                styles.pricingLabel,
+                selectedPlan === 'monthly' && styles.textWhite,
+              ]}
+            >
+              MONTH
+            </Text>
+            <Text
+              style={[
+                styles.pricingPrice,
+                selectedPlan === 'monthly' && styles.textWhite,
+              ]}
+            >
+              $6.99
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
-            style={[styles.pricingCard, selectedPlan === 'yearly' && styles.pricingCardActive]}
+            style={[
+              styles.pricingCard,
+              selectedPlan === 'yearly' && styles.pricingCardActive,
+            ]}
             activeOpacity={0.9}
             onPress={() => setSelectedPlan('yearly')}
           >
-            {selectedPlan === 'yearly' && (
+            {selectedPlan === 'yearly' ? (
               <View style={styles.checkBadge}>
                 <Check size={14} color={PRIMARY_BRAND} strokeWidth={3} />
               </View>
-            )}
+            ) : null}
             <View style={styles.saveBadge}>
               <Text style={styles.saveBadgeText}>SAVE 28%</Text>
             </View>
-            <Text style={[styles.pricingPeriod, selectedPlan === 'yearly' && styles.textWhite]}>12</Text>
-            <Text style={[styles.pricingLabel, selectedPlan === 'yearly' && styles.textWhite]}>MONTHS</Text>
-            <Text style={[styles.pricingPrice, selectedPlan === 'yearly' && styles.textWhite]}>$59.99</Text>
+            <Text
+              style={[
+                styles.pricingPeriod,
+                selectedPlan === 'yearly' && styles.textWhite,
+              ]}
+            >
+              12
+            </Text>
+            <Text
+              style={[
+                styles.pricingLabel,
+                selectedPlan === 'yearly' && styles.textWhite,
+              ]}
+            >
+              MONTHS
+            </Text>
+            <Text
+              style={[
+                styles.pricingPrice,
+                selectedPlan === 'yearly' && styles.textWhite,
+              ]}
+            >
+              $59.99
+            </Text>
           </TouchableOpacity>
         </View>
 
-        <TouchableOpacity 
-          style={styles.continueButton} 
+        <TouchableOpacity
+          style={styles.continueButton}
           activeOpacity={0.8}
-          onPress={() => alert(`Payment integration for ${selectedPlan} coming soon!`)}
+          onPress={showBillingPreview}
         >
           <Text style={styles.continueButtonText}>
             Continue with {selectedPlan === 'yearly' ? 'Yearly' : 'Monthly'}
@@ -112,17 +183,20 @@ export default function PaywallScreen() {
         </TouchableOpacity>
 
         <View style={styles.footerLinks}>
-          <TouchableOpacity><Text style={styles.footerLinkText}>Restore Purchases</Text></TouchableOpacity>
-          <TouchableOpacity><Text style={styles.footerLinkText}>Terms</Text></TouchableOpacity>
-          <TouchableOpacity><Text style={styles.footerLinkText}>Privacy</Text></TouchableOpacity>
+          <TouchableOpacity onPress={showBillingPreview}>
+            <Text style={styles.footerLinkText}>Restore Purchases</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={showBillingPreview}>
+            <Text style={styles.footerLinkText}>Terms</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={showBillingPreview}>
+            <Text style={styles.footerLinkText}>Privacy</Text>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
   );
 }
-
-const PRIMARY_BRAND = '#0F4737';
-const ACCENT_GOLD = '#D7B989';
 
 const styles = StyleSheet.create({
   container: {
@@ -135,6 +209,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: 8,
     paddingBottom: 4,
+  },
+  headerSpacer: {
+    flex: 1,
   },
   closeButton: {
     width: 32,

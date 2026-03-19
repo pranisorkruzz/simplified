@@ -27,6 +27,7 @@ export default function SignupScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const { signUp, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -53,9 +54,16 @@ export default function SignupScreen() {
 
     setLoading(true);
     setError('');
+    setNotice('');
 
     try {
-      await signUp(email, password);
+      const result = await signUp(email, password);
+
+      if (result.emailConfirmationRequired) {
+        setNotice('Check your email to confirm your account, then sign in.');
+        return;
+      }
+
       router.replace('/');
     } catch (err: any) {
       setError(err.message || 'Failed to create account');
@@ -102,6 +110,12 @@ export default function SignupScreen() {
           {error ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorText}>{error}</Text>
+            </View>
+          ) : null}
+
+          {notice ? (
+            <View style={styles.noticeBanner}>
+              <Text style={styles.noticeText}>{notice}</Text>
             </View>
           ) : null}
 
@@ -255,8 +269,18 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     padding: 12,
   },
+  noticeBanner: {
+    backgroundColor: '#E4F3E8',
+    borderRadius: 14,
+    padding: 12,
+  },
   errorText: {
     color: '#8D2D20',
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  noticeText: {
+    color: '#24553A',
     fontSize: 13,
     lineHeight: 18,
   },
