@@ -9,7 +9,6 @@ import {
 } from 'react-native';
 import {
   CheckCheck,
-  Clock3,
   Pencil,
   RotateCcw,
   Trash2,
@@ -51,6 +50,8 @@ export default function TaskCard({
   const entrance = useRef(new Animated.Value(0)).current;
   const priorityColors = getPriorityColors(task.brief?.priority);
   const deadlineTone = getDeadlineTone(task.deadline_at);
+  const hasDeadline = Boolean(task.deadline_at);
+  const hasPriority = Boolean(task.brief?.priority);
   const taskCount = task.brief?.actionItems.length ?? 1;
   const taskPosition = Math.min(task.order_index + 1, taskCount);
 
@@ -83,45 +84,35 @@ export default function TaskCard({
     >
       <View style={styles.taskTopRow}>
         <View style={styles.taskMetaRow}>
-          <View style={styles.timePill}>
-            <Clock3
-              size={14}
-              color={task.completed ? '#4D6E64' : '#0F4737'}
-            />
-            <Text
+          {hasDeadline ? (
+            <View
               style={[
-                styles.timePillText,
-                task.completed && styles.timePillTextFinished,
+                styles.deadlinePill,
+                { backgroundColor: deadlineTone.background },
               ]}
             >
-              {task.brief?.timeLabel || 'No set time'}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.deadlinePill,
-              { backgroundColor: deadlineTone.background },
-            ]}
-          >
-            <Text
+              <Text
+                style={[
+                  styles.deadlinePillText,
+                  { color: deadlineTone.text },
+                ]}
+              >
+                {formatTimeLeft(task.deadline_at!)}
+              </Text>
+            </View>
+          ) : null}
+          {hasPriority ? (
+            <View
               style={[
-                styles.deadlinePillText,
-                { color: deadlineTone.text },
+                styles.priorityPill,
+                { backgroundColor: priorityColors.background },
               ]}
             >
-              {task.deadline_at ? formatTimeLeft(task.deadline_at) : 'No deadline'}
-            </Text>
-          </View>
-          <View
-            style={[
-              styles.priorityPill,
-              { backgroundColor: priorityColors.background },
-            ]}
-          >
-            <Text style={[styles.priorityText, { color: priorityColors.text }]}>
-              {(task.brief?.priority || 'medium').toUpperCase()}
-            </Text>
-          </View>
+              <Text style={[styles.priorityText, { color: priorityColors.text }]}>
+                {task.brief!.priority.toUpperCase()}
+              </Text>
+            </View>
+          ) : null}
         </View>
 
         <TouchableOpacity
@@ -235,23 +226,6 @@ const styles = StyleSheet.create({
     gap: 10,
     flexWrap: 'wrap',
     flex: 1,
-  },
-  timePill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#DDEFEA',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  timePillText: {
-    color: '#0F4737',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  timePillTextFinished: {
-    color: '#4D6E64',
   },
   deadlinePill: {
     borderRadius: 999,

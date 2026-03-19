@@ -1,12 +1,15 @@
 import {
   Alert,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from 'react-native';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { Check, Sparkles, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -19,12 +22,121 @@ export default function PaywallScreen() {
   const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>(
     'yearly'
   );
+  const [activeReviewIndex, setActiveReviewIndex] = useState(0);
+  const reviewScrollRef = useRef<ScrollView>(null);
+  const absoluteIndexRef = useRef(0);
+  const lastRealIndexRef = useRef(0);
+  const { width: windowWidth } = useWindowDimensions();
+  const reviewPageWidth = Math.max(windowWidth - 40, 280);
+
+  const reviews = [
+    {
+      title: 'Task whisperer in your pocket',
+      text: 'Clarix takes vague work, turns it into a simple plan, and makes it obvious what to do next.',
+      author: 'Aditi, Product Designer',
+    },
+    {
+      title: 'Finally clear daily priorities',
+      text: 'I paste messy requests and get focused, actionable tasks with deadlines I can actually follow.',
+      author: 'Rohan, Startup Operator',
+    },
+    {
+      title: 'The fastest way to unblock work',
+      text: 'Clarix removes decision fatigue. I know the next task immediately instead of re-reading long messages.',
+      author: 'Maya, Engineering Lead',
+    },
+  ];
+  const loopRepeatCount = reviews.length > 1 ? 8 : 1;
+  const middleBlockIndex = reviews.length > 1 ? Math.floor(loopRepeatCount / 2) : 0;
+  const baseAbsoluteIndex = middleBlockIndex * reviews.length;
+  const carouselItems =
+    reviews.length > 1
+      ? Array.from(
+          { length: reviews.length * loopRepeatCount },
+          (_, index) => reviews[index % reviews.length]
+        )
+      : reviews;
+
+  useEffect(() => {
+    if (reviews.length <= 1) {
+      absoluteIndexRef.current = 0;
+      return;
+    }
+
+    absoluteIndexRef.current = baseAbsoluteIndex;
+    reviewScrollRef.current?.scrollTo({
+      x: baseAbsoluteIndex * reviewPageWidth,
+      animated: false,
+    });
+  }, [baseAbsoluteIndex, reviewPageWidth, reviews.length]);
 
   const showBillingPreview = () => {
     Alert.alert(
       'Billing not wired yet',
       'The paywall UI is ready, but checkout, restore purchases, terms, and privacy links still need real integrations.'
     );
+  };
+
+  const handleReviewScrollEnd = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    if (reviews.length <= 1) {
+      setActiveReviewIndex(0);
+      return;
+    }
+
+    const absoluteIndex = Math.round(
+      event.nativeEvent.contentOffset.x / reviewPageWidth
+    );
+    const normalized =
+      ((absoluteIndex % reviews.length) + reviews.length) % reviews.length;
+    absoluteIndexRef.current = absoluteIndex;
+    const realIndex = normalized;
+    lastRealIndexRef.current = realIndex;
+    setActiveReviewIndex(realIndex);
+
+    // Recenter around the middle block to preserve infinite swiping in both directions.
+    if (
+      absoluteIndex <= reviews.length ||
+      absoluteIndex >= carouselItems.length - reviews.length
+    ) {
+      const recenteredIndex = baseAbsoluteIndex + normalized;
+      absoluteIndexRef.current = recenteredIndex;
+      reviewScrollRef.current?.scrollTo({
+        x: recenteredIndex * reviewPageWidth,
+        animated: false,
+      });
+    }
+  };
+
+  const handleReviewScroll = (
+    event: NativeSyntheticEvent<NativeScrollEvent>
+  ) => {
+    if (reviews.length <= 1) {
+      return;
+    }
+
+    const absoluteIndex = Math.round(
+      event.nativeEvent.contentOffset.x / reviewPageWidth
+    );
+    const realIndex =
+      ((absoluteIndex % reviews.length) + reviews.length) % reviews.length;
+
+    if (lastRealIndexRef.current !== realIndex) {
+      lastRealIndexRef.current = realIndex;
+      setActiveReviewIndex(realIndex);
+    }
+  };
+
+  const jumpToReview = (index: number) => {
+    const absoluteIndex = reviews.length > 1 ? baseAbsoluteIndex + index : index;
+    absoluteIndexRef.current = absoluteIndex;
+    lastRealIndexRef.current = index;
+    setActiveReviewIndex(index);
+    reviewScrollRef.current?.scrollTo({
+      x: absoluteIndex * reviewPageWidth,
+      animated: true,
+    });
   };
 
   return (
@@ -67,26 +179,50 @@ export default function PaywallScreen() {
           <Text style={styles.laurel}>*</Text>
         </View>
 
-        <View style={styles.testimonialCard}>
-          <Text style={styles.testimonialTitle}>Task whisperer in your pocket</Text>
-          <View style={styles.starsContainer}>
-            {'*****'.split('').map((star, index) => (
-              <Text key={index} style={styles.star}>
-                {star}
-              </Text>
+        <View style={styles.reviewCarousel}>
+          <ScrollView
+            ref={reviewScrollRef}
+            horizontal
+            pagingEnabled
+            showsHorizontalScrollIndicator={false}
+            onMomentumScrollEnd={handleReviewScrollEnd}
+            onScroll={handleReviewScroll}
+            scrollEventThrottle={16}
+            decelerationRate="fast"
+            bounces={false}
+          >
+            {carouselItems.map((review, index) => (
+              <View
+                key={`${review.author}-${index}`}
+                style={[styles.testimonialCard, { width: reviewPageWidth }]}
+              >
+                <Text style={styles.testimonialTitle}>{review.title}</Text>
+                <View style={styles.starsContainer}>
+                  {'*****'.split('').map((star, index) => (
+                    <Text key={index} style={styles.star}>
+                      {star}
+                    </Text>
+                  ))}
+                </View>
+                <Text style={styles.testimonialText}>{review.text}</Text>
+                <Text style={styles.testimonialAuthor}>{review.author}</Text>
+              </View>
             ))}
-          </View>
-          <Text style={styles.testimonialText}>
-            Clarix takes vague work, turns it into a simple plan, and makes it
-            obvious what to do next.
-          </Text>
-          <Text style={styles.testimonialAuthor}>Product preview copy</Text>
+          </ScrollView>
         </View>
 
         <View style={styles.paginationContainer}>
-          <View style={[styles.dot, styles.dotActive]} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
+          {reviews.map((_, index) => (
+            <TouchableOpacity
+              key={index}
+              onPress={() => jumpToReview(index)}
+              style={[
+                styles.dot,
+                activeReviewIndex === index && styles.dotActive,
+              ]}
+              activeOpacity={0.8}
+            />
+          ))}
         </View>
 
         <View style={styles.pricingContainer}>
@@ -177,22 +313,8 @@ export default function PaywallScreen() {
           activeOpacity={0.8}
           onPress={showBillingPreview}
         >
-          <Text style={styles.continueButtonText}>
-            Continue with {selectedPlan === 'yearly' ? 'Yearly' : 'Monthly'}
-          </Text>
+          <Text style={styles.continueButtonText}>Continue</Text>
         </TouchableOpacity>
-
-        <View style={styles.footerLinks}>
-          <TouchableOpacity onPress={showBillingPreview}>
-            <Text style={styles.footerLinkText}>Restore Purchases</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={showBillingPreview}>
-            <Text style={styles.footerLinkText}>Terms</Text>
-          </TouchableOpacity>
-          <TouchableOpacity onPress={showBillingPreview}>
-            <Text style={styles.footerLinkText}>Privacy</Text>
-          </TouchableOpacity>
-        </View>
       </ScrollView>
     </SafeAreaView>
   );
@@ -285,13 +407,15 @@ const styles = StyleSheet.create({
     marginVertical: 2,
   },
   testimonialCard: {
-    width: '100%',
     backgroundColor: '#FBF8F2',
     borderRadius: 20,
     padding: 20,
     borderWidth: 1,
     borderColor: ACCENT_GOLD,
-    marginBottom: 24,
+    marginBottom: 12,
+  },
+  reviewCarousel: {
+    width: '100%',
   },
   testimonialTitle: {
     fontSize: 16,
@@ -331,7 +455,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#D9D9D9',
   },
   dotActive: {
-    backgroundColor: '#888',
+    width: 18,
+    borderRadius: 999,
+    backgroundColor: PRIMARY_BRAND,
   },
   pricingContainer: {
     flexDirection: 'row',
@@ -433,15 +559,5 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 18,
     fontWeight: '700',
-  },
-  footerLinks: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 20,
-  },
-  footerLinkText: {
-    fontSize: 12,
-    color: '#999',
-    fontWeight: '500',
   },
 });

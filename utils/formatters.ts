@@ -25,6 +25,16 @@ export function formatCreatedLabel(value: string) {
   });
 }
 
+export function formatCreatedTimeLabel(value: string) {
+  return new Date(value).toLocaleString(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
 export function formatTimeLeft(value: string) {
   const diff = new Date(value).getTime() - Date.now();
   const abs = Math.abs(diff);

@@ -521,7 +521,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     color: '#102D24',
     fontFamily: DISPLAY_FONT,
-    fontSize: 28,
+    fontSize: 22,
   },
   sectionBadge: {
     flexDirection: 'row',
