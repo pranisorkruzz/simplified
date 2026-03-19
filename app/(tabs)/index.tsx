@@ -15,7 +15,10 @@ import {
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import {
   ArrowRight,
   CheckCheck,
@@ -55,10 +58,7 @@ async function fetchBriefsData(userId: string) {
   return { chatsData, chatsError, tasksData };
 }
 
-async function insertTasksForBrief(
-  userId: string,
-  brief: BriefCard
-) {
+async function insertTasksForBrief(userId: string, brief: BriefCard) {
   const baseRows = brief.actionItems.map((item, index) => ({
     user_id: userId,
     chat_id: brief.id,
@@ -78,7 +78,7 @@ async function insertTasksForBrief(
     baseRows.map((row) => ({
       ...row,
       deadline_at: brief.deadlineAt,
-    }))
+    })),
   );
 
   if (!error) {
@@ -210,7 +210,9 @@ function BriefCardItem({
             { backgroundColor: priorityColors.background },
           ]}
         >
-          <Text style={[styles.priorityPillText, { color: priorityColors.text }]}>
+          <Text
+            style={[styles.priorityPillText, { color: priorityColors.text }]}
+          >
             {brief.priority.toUpperCase()}
           </Text>
         </View>
@@ -311,7 +313,7 @@ export default function BriefsScreen() {
     const linkedTaskIds = new Set(
       (tasksData ?? [])
         .map((task: { chat_id: string | null }) => task.chat_id)
-        .filter((chatId): chatId is string => Boolean(chatId))
+        .filter((chatId): chatId is string => Boolean(chatId)),
     );
 
     const nextBriefs = (chatsData ?? [])
@@ -355,7 +357,9 @@ export default function BriefsScreen() {
 
     const loadInitialBriefs = async () => {
       setLoading(true);
-      const { chatsData, chatsError, tasksData } = await fetchBriefsData(user.id);
+      const { chatsData, chatsError, tasksData } = await fetchBriefsData(
+        user.id,
+      );
 
       if (!active) {
         return;
@@ -370,7 +374,7 @@ export default function BriefsScreen() {
       const linkedTaskIds = new Set(
         (tasksData ?? [])
           .map((task: { chat_id: string | null }) => task.chat_id)
-          .filter((chatId): chatId is string => Boolean(chatId))
+          .filter((chatId): chatId is string => Boolean(chatId)),
       );
 
       const nextBriefs = (chatsData ?? [])
@@ -463,7 +467,7 @@ export default function BriefsScreen() {
     } catch (error) {
       const nextMessage = getSupabaseErrorMessage(
         error,
-        'Failed to summarize email'
+        'Failed to summarize email',
       );
       setErrorMessage(nextMessage);
       console.warn('Error summarizing email:', nextMessage);
@@ -483,7 +487,7 @@ export default function BriefsScreen() {
     try {
       const { error, insertedWithoutDeadline } = await insertTasksForBrief(
         user.id,
-        brief
+        brief,
       );
 
       if (error) {
@@ -492,8 +496,8 @@ export default function BriefsScreen() {
 
       setBriefs((prev) =>
         prev.map((item) =>
-          item.id === brief.id ? { ...item, addedToTasks: true } : item
-        )
+          item.id === brief.id ? { ...item, addedToTasks: true } : item,
+        ),
       );
       setTaskStats((prev) => ({
         ...prev,
@@ -501,7 +505,7 @@ export default function BriefsScreen() {
       }));
       if (insertedWithoutDeadline) {
         setErrorMessage(
-          'Tasks were added, but deadline storage is not enabled in your database yet.'
+          'Tasks were added, but deadline storage is not enabled in your database yet.',
         );
       }
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -521,7 +525,8 @@ export default function BriefsScreen() {
         contentContainerStyle={[
           styles.scrollContent,
           {
-            paddingTop: 10 + Math.max(insets.top, Platform.OS === 'android' ? 10 : 0),
+            paddingTop:
+              10 + Math.max(insets.top, Platform.OS === 'android' ? 10 : 0),
             paddingBottom: 112 + Math.max(insets.bottom, 12),
           },
         ]}
@@ -555,13 +560,12 @@ export default function BriefsScreen() {
             colors={['#103B31', '#1C6A57', '#D7B989']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-            <Text style={styles.eyebrow}>EMAIL TO ACTION</Text>
-            <Text style={styles.heroTitle}>Inbox Briefs</Text>
+            style={styles.heroCard}
+          >
+            <Text style={styles.eyebrow}>ANY TASK TO ACTION</Text>
+            <Text style={styles.heroTitle}>Clarix</Text>
             <Text style={styles.heroSubtitle}>
-              Turn messy email threads into one clean task card with timing,
-              summary, and next steps.
+              Turn any problem into a clear step by step plan
             </Text>
 
             <View style={styles.heroStatsRow}>
@@ -586,11 +590,10 @@ export default function BriefsScreen() {
         </Animated.View>
 
         <View style={styles.composerCard}>
-          <Text style={styles.sectionEyebrow}>PASTE AN EMAIL</Text>
-          <Text style={styles.sectionTitle}>Generate a visual task brief</Text>
+          <Text style={styles.sectionEyebrow}>PASTE ANYTHING</Text>
+          <Text style={styles.sectionTitle}>Break it into simple steps</Text>
           <Text style={styles.sectionSubtitle}>
-            Paste a meeting invite, follow-up, or client email. The app will
-            summarize it and let the user add it straight into tasks.
+            Paste any task, problem, document or idea. Clarix breaks it down into clear visual steps instantly.
           </Text>
 
           <TextInput
@@ -599,7 +602,7 @@ export default function BriefsScreen() {
             value={draftEmail}
             onChangeText={setDraftEmail}
             placeholder={
-              'Example:\nHi team, quick reminder that our roadmap review is at 10 AM tomorrow. Please bring final blockers and decision notes.'
+              "Example:\nI need to launch my app on the Play Store by Friday but don't know where to start."
             }
             placeholderTextColor="#7B8A83"
             textAlignVertical="top"
@@ -630,7 +633,7 @@ export default function BriefsScreen() {
               ) : (
                 <>
                   <Sparkles size={18} color="#F7F3EA" />
-                  <Text style={styles.primaryButtonText}>Summarize Email</Text>
+                  <Text style={styles.primaryButtonText}>Break It Down</Text>
                   <ArrowRight size={18} color="#F7F3EA" />
                 </>
               )}
@@ -653,7 +656,9 @@ export default function BriefsScreen() {
         ) : briefs.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyEyebrow}>NO BRIEFS YET</Text>
-            <Text style={styles.emptyTitle}>Start with one important email</Text>
+            <Text style={styles.emptyTitle}>
+              Start with one important email
+            </Text>
             <Text style={styles.emptyCopy}>
               The first summary card will appear here, ready to drop into Tasks.
             </Text>

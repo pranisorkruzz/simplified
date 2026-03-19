@@ -12,7 +12,10 @@ import {
 import { Redirect, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 
 const DISPLAY_FONT = Platform.select({
@@ -60,7 +63,10 @@ export default function LoginScreen() {
         style={[
           styles.keyboardView,
           {
-            paddingTop: Math.max(insets.top, Platform.OS === 'android' ? 14 : 0),
+            paddingTop: Math.max(
+              insets.top,
+              Platform.OS === 'android' ? 14 : 0,
+            ),
             paddingBottom: Math.max(insets.bottom, 14),
           },
         ]}
