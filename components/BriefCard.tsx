@@ -16,7 +16,11 @@ import {
   Plus,
 } from 'lucide-react-native';
 import { EmailBrief } from '@/lib/briefs';
-import { getPriorityColors, formatTimeLeft } from '@/utils/formatters';
+import {
+  getPriorityColors,
+  formatTimeLeft,
+  formatCreatedTimeLabel,
+} from '@/utils/formatters';
 
 export type BriefCardType = EmailBrief & {
   id: string;
@@ -82,7 +86,9 @@ export default function BriefCardItem({
         <View style={styles.metaStack}>
           <View style={styles.timePill}>
             <Clock3 size={14} color="#0F4737" />
-            <Text style={styles.timePillText}>{brief.timeLabel}</Text>
+            <Text style={styles.timePillText}>
+              {formatCreatedTimeLabel(brief.createdAt)}
+            </Text>
           </View>
           {brief.deadlineAt ? (
             <View style={styles.deadlinePill}>
