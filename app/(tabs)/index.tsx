@@ -36,6 +36,8 @@ import {
 } from '@/lib/supabase';
 
 import BriefCardItem, { BriefCardType as BriefCard } from '@/components/BriefCard';
+import BriefsHero from '@/components/BriefsHero';
+import BriefComposer from '@/components/BriefComposer';
 
 async function fetchBriefsData(userId: string) {
   const baseChatsQuery = await supabase
@@ -168,7 +170,6 @@ export default function BriefsScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const heroEntrance = useRef(new Animated.Value(0)).current;
   const [briefs, setBriefs] = useState<BriefCard[]>([]);
   const [draftEmail, setDraftEmail] = useState('');
   const [loading, setLoading] = useState(true);
@@ -180,15 +181,6 @@ export default function BriefsScreen() {
     active: 0,
     finished: 0,
   });
-
-  useEffect(() => {
-    Animated.timing(heroEntrance, {
-      toValue: 1,
-      duration: 600,
-      easing: Easing.out(Easing.cubic),
-      useNativeDriver: true,
-    }).start();
-  }, [heroEntrance]);
 
   const loadBriefs = async (mode: 'initial' | 'refresh' = 'initial') => {
     if (!user) {
@@ -378,106 +370,19 @@ export default function BriefsScreen() {
           />
         }
       >
-        <Animated.View
-          style={[
-            styles.heroWrap,
-            {
-              opacity: heroEntrance,
-              transform: [
-                {
-                  translateY: heroEntrance.interpolate({
-                    inputRange: [0, 1],
-                    outputRange: [30, 0],
-                  }),
-                },
-              ],
-            },
-          ]}
-        >
-          <LinearGradient
-            colors={['#103B31', '#1C6A57', '#D7B989']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 1 }}
-            style={styles.heroCard}
-          >
-            <Text style={styles.eyebrow}>ANY TASK TO ACTION</Text>
-            <Text style={styles.heroTitle}>Clarix</Text>
-            <Text style={styles.heroSubtitle}>
-              Turn any problem into a clear step by step plan
-            </Text>
+        <BriefsHero
+          briefsCount={briefs.length}
+          activeTasksCount={taskStats.active}
+          finishedTasksCount={taskStats.finished}
+        />
 
-            <View style={styles.heroStatsRow}>
-              <View style={styles.heroStatPill}>
-                <Sparkles size={15} color="#103B31" />
-                <Text style={styles.heroStatText}>{briefs.length} briefs</Text>
-              </View>
-              <View style={styles.heroStatPill}>
-                <CheckCheck size={15} color="#103B31" />
-                <Text style={styles.heroStatText}>
-                  {taskStats.active} active
-                </Text>
-              </View>
-              <View style={styles.heroStatPill}>
-                <Clock3 size={15} color="#103B31" />
-                <Text style={styles.heroStatText}>
-                  {taskStats.finished} finished
-                </Text>
-              </View>
-            </View>
-          </LinearGradient>
-        </Animated.View>
-
-        <View style={styles.composerCard}>
-          <Text style={styles.sectionEyebrow}>PASTE ANYTHING</Text>
-          <Text style={styles.sectionTitle}>Break it into simple steps</Text>
-          <Text style={styles.sectionSubtitle}>
-            Paste any task, problem, document or idea. Clarix breaks it down into clear visual steps instantly.
-          </Text>
-
-          <TextInput
-            style={styles.emailInput}
-            multiline
-            value={draftEmail}
-            onChangeText={setDraftEmail}
-            placeholder={
-              "Example:\nI need to launch my app on the Play Store by Friday but don't know where to start."
-            }
-            placeholderTextColor="#7B8A83"
-            textAlignVertical="top"
-          />
-
-          {errorMessage ? (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorBannerText}>{errorMessage}</Text>
-            </View>
-          ) : null}
-
-          <TouchableOpacity
-            style={styles.primaryButtonWrap}
-            onPress={() => void handleSummarize()}
-            disabled={submitting}
-          >
-            <LinearGradient
-              colors={['#0F4737', '#216B56']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[
-                styles.primaryButton,
-                submitting && styles.primaryButtonDisabled,
-              ]}
-            >
-              {submitting ? (
-                <ActivityIndicator size="small" color="#F7F3EA" />
-              ) : (
-                <>
-                  <Sparkles size={18} color="#F7F3EA" />
-                  <Text style={styles.primaryButtonText}>Break It Down</Text>
-                  <ArrowRight size={18} color="#F7F3EA" />
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
-        </View>
+        <BriefComposer
+          draftEmail={draftEmail}
+          setDraftEmail={setDraftEmail}
+          errorMessage={errorMessage}
+          submitting={submitting}
+          onSummarize={handleSummarize}
+        />
 
         <View style={styles.listHeader}>
           <Text style={styles.listTitle}>Recent Briefs</Text>
@@ -525,126 +430,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 18,
     gap: 18,
-  },
-  heroWrap: {
-    borderRadius: 30,
-  },
-  heroCard: {
-    borderRadius: 30,
-    padding: Platform.select({ android: 22, default: 24 }),
-    minHeight: Platform.select({ android: 208, default: 220 }),
-    justifyContent: 'space-between',
-  },
-  eyebrow: {
-    color: '#F7F3EA',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2.2,
-  },
-  heroTitle: {
-    color: '#F7F3EA',
-    fontFamily: DISPLAY_FONT,
-    fontSize: Platform.select({ android: 36, default: 40 }),
-    lineHeight: Platform.select({ android: 40, default: 44 }),
-    marginTop: 8,
-  },
-  heroSubtitle: {
-    color: '#E5DDD1',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-    maxWidth: '92%',
-  },
-  heroStatsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 20,
-  },
-  heroStatPill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    backgroundColor: '#F6D8AB',
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  heroStatText: {
-    color: '#103B31',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  composerCard: {
-    backgroundColor: '#FBF8F2',
-    borderRadius: 28,
-    padding: Platform.select({ android: 18, default: 20 }),
-    shadowColor: '#17392E',
-    shadowOffset: { width: 0, height: 14 },
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    elevation: 6,
-  },
-  sectionEyebrow: {
-    color: '#1B5A49',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  sectionTitle: {
-    color: '#102D24',
-    fontFamily: DISPLAY_FONT,
-    fontSize: Platform.select({ android: 28, default: 31 }),
-    lineHeight: Platform.select({ android: 33, default: 36 }),
-    marginTop: 10,
-  },
-  sectionSubtitle: {
-    color: '#5A6A63',
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 10,
-  },
-  emailInput: {
-    minHeight: 182,
-    backgroundColor: '#F2ECE1',
-    borderRadius: 22,
-    padding: 18,
-    color: '#102D24',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 18,
-    textAlignVertical: 'top',
-  },
-  errorBanner: {
-    marginTop: 12,
-    backgroundColor: '#FFE2DC',
-    borderRadius: 14,
-    padding: 12,
-  },
-  errorBannerText: {
-    color: '#8D2D20',
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  primaryButtonWrap: {
-    marginTop: 18,
-  },
-  primaryButton: {
-    borderRadius: 18,
-    minHeight: 56,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  primaryButtonDisabled: {
-    opacity: 0.7,
-  },
-  primaryButtonText: {
-    color: '#F7F3EA',
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: 0.4,
   },
   listHeader: {
     flexDirection: 'row',

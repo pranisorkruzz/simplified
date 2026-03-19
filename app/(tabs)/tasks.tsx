@@ -34,6 +34,8 @@ import {
   supabase,
 } from '@/lib/supabase';
 import TaskCard, { TaskRow } from '@/components/TaskCard';
+import TasksHero from '@/components/TasksHero';
+import DeadlineModal from '@/components/DeadlineModal';
 import { formatDeadlineInputValue, parseManualDeadlineInput } from '@/utils/formatters';
 
 const DISPLAY_FONT = Platform.select({
@@ -409,50 +411,12 @@ export default function TasksScreen() {
           />
         }
       >
-        <LinearGradient
-          colors={['#103B31', '#1D5A49', '#CDB086']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-          <Text style={styles.heroEyebrow}>TASK BOARD</Text>
-          <Text style={styles.heroTitle}>From brief to done</Text>
-          <Text style={styles.heroSubtitle}>
-            Each task shows when it was added, when it is due, and how much time is
-            left.
-          </Text>
-
-          <View style={styles.heroStatsRow}>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatNumber}>{activeTasks.length}</Text>
-              <Text style={styles.heroStatLabel}>Active</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatNumber}>{finishedTasks.length}</Text>
-              <Text style={styles.heroStatLabel}>Finished</Text>
-            </View>
-            <View style={styles.heroStat}>
-              <Text style={styles.heroStatNumber}>{completionRate}%</Text>
-              <Text style={styles.heroStatLabel}>Complete</Text>
-            </View>
-          </View>
-        </LinearGradient>
-
-        <View style={styles.progressShell}>
-          <View style={styles.progressTrack}>
-            <View
-              style={[
-                styles.progressFill,
-                { width: `${Math.max(completionRate, totalCount ? 8 : 0)}%` },
-              ]}
-            />
-          </View>
-          <Text style={styles.progressLabel}>
-            {totalCount === 0
-              ? 'No tasks yet'
-              : `${finishedTasks.length} of ${totalCount} tasks closed`}
-          </Text>
-        </View>
+        <TasksHero
+          activeCount={activeTasks.length}
+          finishedCount={finishedTasks.length}
+          totalCount={totalCount}
+          completionRate={completionRate}
+        />
 
         {screenError ? (
           <View style={styles.errorBanner}>
@@ -526,64 +490,16 @@ export default function TasksScreen() {
         )}
       </ScrollView>
 
-      <Modal
+      <DeadlineModal
         visible={Boolean(deadlineTask)}
-        transparent
-        animationType="fade"
-        onRequestClose={closeDeadlineEditor}
-      >
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
-            <Text style={styles.modalEyebrow}>MANUAL DEADLINE</Text>
-            <Text style={styles.modalTitle}>Add or edit a deadline</Text>
-            <Text style={styles.modalCopy}>
-              Use `YYYY-MM-DD` or `YYYY-MM-DD HH:mm`. Leaving it blank removes the
-              deadline.
-            </Text>
-
-            <TextInput
-              style={styles.modalInput}
-              value={deadlineInput}
-              onChangeText={setDeadlineInput}
-              placeholder="2026-03-19 10:00"
-              placeholderTextColor="#7B8A83"
-              autoCapitalize="none"
-            />
-
-            {deadlineError ? (
-              <View style={styles.modalError}>
-                <Text style={styles.modalErrorText}>{deadlineError}</Text>
-              </View>
-            ) : null}
-
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalSecondary} onPress={closeDeadlineEditor}>
-                <Text style={styles.modalSecondaryText}>Cancel</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalSecondary}
-                onPress={() => void clearDeadline()}
-                disabled={savingDeadline}
-              >
-                <Text style={styles.modalSecondaryText}>Clear</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={styles.modalPrimary}
-                onPress={() => void saveDeadline()}
-                disabled={savingDeadline}
-              >
-                {savingDeadline ? (
-                  <ActivityIndicator size="small" color="#F7F3EA" />
-                ) : (
-                  <Text style={styles.modalPrimaryText}>Save</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+        deadlineInput={deadlineInput}
+        setDeadlineInput={setDeadlineInput}
+        deadlineError={deadlineError}
+        savingDeadline={savingDeadline}
+        onClose={closeDeadlineEditor}
+        onClear={() => void clearDeadline()}
+        onSave={() => void saveDeadline()}
+      />
     </SafeAreaView>
   );
 }
@@ -596,75 +512,6 @@ const styles = StyleSheet.create({
   scrollContent: {
     padding: 18,
     gap: 18,
-  },
-  heroCard: {
-    borderRadius: 30,
-    padding: Platform.select({ android: 22, default: 24 }),
-  },
-  heroEyebrow: {
-    color: '#F7F3EA',
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  heroTitle: {
-    color: '#F7F3EA',
-    fontFamily: DISPLAY_FONT,
-    fontSize: Platform.select({ android: 35, default: 39 }),
-    lineHeight: Platform.select({ android: 40, default: 44 }),
-    marginTop: 8,
-  },
-  heroSubtitle: {
-    color: '#E5DDD1',
-    fontSize: 15,
-    lineHeight: 22,
-    marginTop: 12,
-    maxWidth: '92%',
-  },
-  heroStatsRow: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 24,
-  },
-  heroStat: {
-    flex: 1,
-    backgroundColor: 'rgba(247, 243, 234, 0.16)',
-    borderRadius: 20,
-    paddingVertical: 16,
-    paddingHorizontal: 12,
-  },
-  heroStatNumber: {
-    color: '#F7F3EA',
-    fontSize: 24,
-    fontWeight: '800',
-  },
-  heroStatLabel: {
-    color: '#E5DDD1',
-    fontSize: 12,
-    fontWeight: '600',
-    marginTop: 4,
-  },
-  progressShell: {
-    backgroundColor: '#FBF8F2',
-    borderRadius: 22,
-    padding: 16,
-  },
-  progressTrack: {
-    height: 10,
-    backgroundColor: '#E6DDD0',
-    borderRadius: 999,
-    overflow: 'hidden',
-  },
-  progressFill: {
-    height: '100%',
-    backgroundColor: '#1D6D58',
-    borderRadius: 999,
-  },
-  progressLabel: {
-    marginTop: 10,
-    color: '#52635B',
-    fontSize: 13,
-    fontWeight: '600',
   },
   errorBanner: {
     backgroundColor: '#FFE2DC',
@@ -730,83 +577,4 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
 
-  modalBackdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(16, 45, 36, 0.34)',
-    justifyContent: 'center',
-    padding: 18,
-  },
-  modalCard: {
-    backgroundColor: '#FBF8F2',
-    borderRadius: 28,
-    padding: Platform.select({ android: 20, default: 22 }),
-  },
-  modalEyebrow: {
-    color: '#1B5A49',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 2,
-  },
-  modalTitle: {
-    color: '#102D24',
-    fontFamily: DISPLAY_FONT,
-    fontSize: 28,
-    marginTop: 10,
-  },
-  modalCopy: {
-    color: '#5A6A63',
-    fontSize: 14,
-    lineHeight: 22,
-    marginTop: 10,
-  },
-  modalInput: {
-    marginTop: 18,
-    backgroundColor: '#F2ECE1',
-    borderRadius: 18,
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    fontSize: 15,
-    color: '#102D24',
-  },
-  modalError: {
-    marginTop: 12,
-    backgroundColor: '#FFE2DC',
-    borderRadius: 14,
-    padding: 12,
-  },
-  modalErrorText: {
-    color: '#8D2D20',
-    fontSize: 13,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  modalSecondary: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 16,
-    backgroundColor: '#E8E1D6',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalSecondaryText: {
-    color: '#163D32',
-    fontSize: 13,
-    fontWeight: '700',
-  },
-  modalPrimary: {
-    flex: 1,
-    minHeight: 50,
-    borderRadius: 16,
-    backgroundColor: '#102D24',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  modalPrimaryText: {
-    color: '#F7F3EA',
-    fontSize: 13,
-    fontWeight: '700',
-  },
 });
