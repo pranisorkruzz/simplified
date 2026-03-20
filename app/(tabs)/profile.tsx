@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   View,
   Text,
   TouchableOpacity,
@@ -7,6 +8,7 @@ import {
   ScrollView,
   Platform,
 } from 'react-native';
+import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -34,17 +36,47 @@ export default function ProfileScreen() {
   const { user, profile, signOut } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const [signingOut, setSigningOut] = useState(false);
+
+  const performSignOut = async () => {
+    if (signingOut) {
+      return;
+    }
+
+    setSigningOut(true);
+
+    try {
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await signOut();
+      router.replace('/login');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      Alert.alert('Sign out failed', 'Please try again.');
+    } finally {
+      setSigningOut(false);
+    }
+  };
 
   const handleSignOut = () => {
+    if (Platform.OS === 'web') {
+      const confirmed = globalThis.confirm?.(
+        'Are you sure you want to sign out?'
+      );
+
+      if (confirmed) {
+        void performSignOut();
+      }
+
+      return;
+    }
+
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: async () => {
-          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          await signOut();
-          router.replace('/login');
+        onPress: () => {
+          void performSignOut();
         },
       },
     ]);
@@ -137,13 +169,26 @@ export default function ProfileScreen() {
 
           <View style={styles.divider} />
 
-          <TouchableOpacity style={styles.menuItem} onPress={handleSignOut}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={handleSignOut}
+            disabled={signingOut}
+          >
             <View style={[styles.iconBox, { backgroundColor: '#FFE2DC' }]}>
               <LogOut size={20} color="#D33F2E" />
             </View>
-            <Text style={[styles.menuText, { color: '#D33F2E' }]}>
-              Sign Out
-            </Text>
+            {signingOut ? (
+              <View style={styles.signingOutRow}>
+                <ActivityIndicator size="small" color="#D33F2E" />
+                <Text style={[styles.menuText, { color: '#D33F2E', flex: 0 }]}>
+                  Signing Out...
+                </Text>
+              </View>
+            ) : (
+              <Text style={[styles.menuText, { color: '#D33F2E' }]}>
+                Sign Out
+              </Text>
+            )}
             <ChevronRight size={20} color="#99A69F" />
           </TouchableOpacity>
         </View>
@@ -300,6 +345,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#102D24',
+  },
+  signingOutRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   divider: {
     height: 1,

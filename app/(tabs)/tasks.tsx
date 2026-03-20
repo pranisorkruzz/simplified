@@ -8,6 +8,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   UIManager,
   View,
 } from 'react-native';
@@ -38,6 +39,19 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
+const ALL_ACTIVE_FILTER = 'all';
+const UNGROUPED_ACTIVE_FILTER = 'ungrouped';
+
+function getBriefFilterLabel(task: TaskRow) {
+  const rawTitle = task.brief?.title?.trim();
+
+  if (!rawTitle) {
+    return 'Other Tasks';
+  }
+
+  return rawTitle.length > 26 ? `${rawTitle.slice(0, 26).trim()}...` : rawTitle;
+}
+
 export default function TasksScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -50,6 +64,7 @@ export default function TasksScreen() {
   const [screenError, setScreenError] = useState('');
   const [deadlineFeatureAvailable, setDeadlineFeatureAvailable] = useState(true);
   const [savingDeadline, setSavingDeadline] = useState(false);
+  const [selectedActiveFilter, setSelectedActiveFilter] = useState(ALL_ACTIVE_FILTER);
 
   const applyTaskFeed = (
     feed: Awaited<ReturnType<typeof fetchTaskFeed>>,
@@ -262,6 +277,46 @@ export default function TasksScreen() {
 
   const activeTasks = tasks.filter((task) => !task.completed);
   const finishedTasks = tasks.filter((task) => task.completed);
+  const activeTaskGroups = Array.from(
+    activeTasks.reduce((groups, task) => {
+      const groupId = task.chat_id ?? UNGROUPED_ACTIVE_FILTER;
+      const existing = groups.get(groupId);
+
+      if (existing) {
+        existing.count += 1;
+        return groups;
+      }
+
+      groups.set(groupId, {
+        id: groupId,
+        label: getBriefFilterLabel(task),
+        count: 1,
+      });
+      return groups;
+    }, new Map<string, { id: string; label: string; count: number }>()),
+    ([, group]) => group,
+  );
+  const filteredActiveTasks =
+    selectedActiveFilter === ALL_ACTIVE_FILTER
+      ? activeTasks
+      : activeTasks.filter(
+          (task) =>
+            (task.chat_id ?? UNGROUPED_ACTIVE_FILTER) === selectedActiveFilter,
+        );
+
+  useEffect(() => {
+    if (selectedActiveFilter === ALL_ACTIVE_FILTER) {
+      return;
+    }
+
+    const stillExists = activeTaskGroups.some(
+      (group) => group.id === selectedActiveFilter,
+    );
+
+    if (!stillExists) {
+      setSelectedActiveFilter(ALL_ACTIVE_FILTER);
+    }
+  }, [activeTaskGroups, selectedActiveFilter]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -304,6 +359,91 @@ export default function TasksScreen() {
               </View>
             </View>
 
+            {activeTasks.length > 0 ? (
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterRow}
+              >
+                <TouchableOpacity
+                  style={[
+                    styles.filterChip,
+                    selectedActiveFilter === ALL_ACTIVE_FILTER &&
+                      styles.filterChipActive,
+                  ]}
+                  onPress={() => setSelectedActiveFilter(ALL_ACTIVE_FILTER)}
+                  activeOpacity={0.85}
+                >
+                  <Text
+                    style={[
+                      styles.filterChipText,
+                      selectedActiveFilter === ALL_ACTIVE_FILTER &&
+                        styles.filterChipTextActive,
+                    ]}
+                  >
+                    All
+                  </Text>
+                  <View
+                    style={[
+                      styles.filterCount,
+                      selectedActiveFilter === ALL_ACTIVE_FILTER &&
+                        styles.filterCountActive,
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.filterCountText,
+                        selectedActiveFilter === ALL_ACTIVE_FILTER &&
+                          styles.filterCountTextActive,
+                      ]}
+                    >
+                      {activeTasks.length}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+
+                {activeTaskGroups.map((group) => {
+                  const isSelected = selectedActiveFilter === group.id;
+
+                  return (
+                    <TouchableOpacity
+                      key={group.id}
+                      style={[
+                        styles.filterChip,
+                        isSelected && styles.filterChipActive,
+                      ]}
+                      onPress={() => setSelectedActiveFilter(group.id)}
+                      activeOpacity={0.85}
+                    >
+                      <Text
+                        style={[
+                          styles.filterChipText,
+                          isSelected && styles.filterChipTextActive,
+                        ]}
+                      >
+                        {group.label}
+                      </Text>
+                      <View
+                        style={[
+                          styles.filterCount,
+                          isSelected && styles.filterCountActive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.filterCountText,
+                            isSelected && styles.filterCountTextActive,
+                          ]}
+                        >
+                          {group.count}
+                        </Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            ) : null}
+
             {activeTasks.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>No active tasks</Text>
@@ -312,7 +452,7 @@ export default function TasksScreen() {
                 </Text>
               </View>
             ) : (
-              activeTasks.map((task, index) => (
+              filteredActiveTasks.map((task, index) => (
                 <TaskCard
                   key={task.id}
                   task={task}
@@ -412,6 +552,51 @@ const styles = StyleSheet.create({
     color: '#0F4737',
     fontSize: 12,
     fontWeight: '800',
+  },
+  filterRow: {
+    gap: 10,
+    paddingBottom: 2,
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#E8E0D2',
+    borderRadius: 999,
+    paddingLeft: 14,
+    paddingRight: 10,
+    paddingVertical: 10,
+  },
+  filterChipActive: {
+    backgroundColor: '#102D24',
+  },
+  filterChipText: {
+    color: '#29433A',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  filterChipTextActive: {
+    color: '#F7F3EA',
+  },
+  filterCount: {
+    minWidth: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: 'rgba(16, 45, 36, 0.08)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 7,
+  },
+  filterCountActive: {
+    backgroundColor: 'rgba(247, 243, 234, 0.18)',
+  },
+  filterCountText: {
+    color: '#29433A',
+    fontSize: 11,
+    fontWeight: '800',
+  },
+  filterCountTextActive: {
+    color: '#F7F3EA',
   },
   emptyCard: {
     backgroundColor: '#FBF8F2',
