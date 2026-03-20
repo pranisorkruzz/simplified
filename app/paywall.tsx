@@ -1,4 +1,5 @@
 import {
+  ActivityIndicator,
   Alert,
   NativeScrollEvent,
   NativeSyntheticEvent,
@@ -10,19 +11,64 @@ import {
   View,
 } from 'react-native';
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { Check, Sparkles, X } from 'lucide-react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '@/contexts/AuthContext';
+import { UserType } from '@/types/database';
 
 const PRIMARY_BRAND = '#0F4737';
 const ACCENT_GOLD = '#D7B989';
 
+type PlanId = 'free' | 'monthly' | 'yearly';
+
+type PlanOption = {
+  id: PlanId;
+  period: string;
+  label: string;
+  price: string;
+  badge?: string;
+};
+
+const BASE_PLANS: PlanOption[] = [
+  { id: 'monthly', period: '1', label: 'MONTH', price: '$6.99' },
+  {
+    id: 'yearly',
+    period: '12',
+    label: 'MONTHS',
+    price: '$59.99',
+    badge: 'SAVE 28%',
+  },
+];
+
+const NEW_USER_PLANS: PlanOption[] = [
+  { id: 'free', period: 'FREE', label: 'MODEL', price: '$0' },
+  ...BASE_PLANS,
+];
+
 export default function PaywallScreen() {
   const router = useRouter();
-  const [selectedPlan, setSelectedPlan] = useState<'monthly' | 'yearly'>(
-    'yearly'
+  const { user, profile, updateProfile, loading: authLoading } = useAuth();
+  const params = useLocalSearchParams<{
+    entry?: string | string[];
+    userType?: string | string[];
+  }>();
+
+  const entryParam = Array.isArray(params.entry) ? params.entry[0] : params.entry;
+  const rawUserType = Array.isArray(params.userType)
+    ? params.userType[0]
+    : params.userType;
+  const userTypeParam: UserType | undefined =
+    rawUserType === 'student' || rawUserType === 'professional'
+      ? rawUserType
+      : undefined;
+  const isNewUserEntry = entryParam === 'new_user';
+
+  const [selectedPlan, setSelectedPlan] = useState<PlanId>(
+    isNewUserEntry ? 'free' : 'yearly'
   );
   const [activeReviewIndex, setActiveReviewIndex] = useState(0);
+  const [continuing, setContinuing] = useState(false);
   const reviewScrollRef = useRef<ScrollView>(null);
   const absoluteIndexRef = useRef(0);
   const lastRealIndexRef = useRef(0);
@@ -53,9 +99,15 @@ export default function PaywallScreen() {
     reviews.length > 1
       ? Array.from(
           { length: reviews.length * loopRepeatCount },
-          (_, index) => reviews[index % reviews.length]
+          (_, index) => reviews[index % reviews.length],
         )
       : reviews;
+
+  const planOptions = isNewUserEntry ? NEW_USER_PLANS : BASE_PLANS;
+
+  useEffect(() => {
+    setSelectedPlan(isNewUserEntry ? 'free' : 'yearly');
+  }, [isNewUserEntry]);
 
   useEffect(() => {
     if (reviews.length <= 1) {
@@ -73,12 +125,67 @@ export default function PaywallScreen() {
   const showBillingPreview = () => {
     Alert.alert(
       'Billing not wired yet',
-      'The paywall UI is ready, but checkout, restore purchases, terms, and privacy links still need real integrations.'
+      'The paywall UI is ready, but checkout, restore purchases, terms, and privacy links still need real integrations.',
     );
   };
 
+  const handleContinue = async () => {
+    if (!isNewUserEntry) {
+      showBillingPreview();
+      return;
+    }
+
+    if (!user) {
+      router.replace('/login');
+      return;
+    }
+
+    setContinuing(true);
+
+    try {
+      if (!profile) {
+        if (!userTypeParam) {
+          Alert.alert(
+            'Choose your focus first',
+            'Please pick Student or Working Professional before continuing.',
+            [
+              {
+                text: 'Go to onboarding',
+                onPress: () => router.replace('/onboarding'),
+              },
+            ],
+          );
+          return;
+        }
+
+        await updateProfile(userTypeParam);
+      }
+
+      if (selectedPlan === 'free') {
+        router.replace('/(tabs)');
+        return;
+      }
+
+      Alert.alert(
+        'Billing not wired yet',
+        'Checkout is not connected yet. We will continue with free access for now.',
+        [
+          {
+            text: 'Continue',
+            onPress: () => router.replace('/(tabs)'),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Error finishing onboarding paywall:', error);
+      Alert.alert('Something went wrong', 'Please try again.');
+    } finally {
+      setContinuing(false);
+    }
+  };
+
   const handleReviewScrollEnd = (
-    event: NativeSyntheticEvent<NativeScrollEvent>
+    event: NativeSyntheticEvent<NativeScrollEvent>,
   ) => {
     if (reviews.length <= 1) {
       setActiveReviewIndex(0);
@@ -86,7 +193,7 @@ export default function PaywallScreen() {
     }
 
     const absoluteIndex = Math.round(
-      event.nativeEvent.contentOffset.x / reviewPageWidth
+      event.nativeEvent.contentOffset.x / reviewPageWidth,
     );
     const normalized =
       ((absoluteIndex % reviews.length) + reviews.length) % reviews.length;
@@ -109,15 +216,13 @@ export default function PaywallScreen() {
     }
   };
 
-  const handleReviewScroll = (
-    event: NativeSyntheticEvent<NativeScrollEvent>
-  ) => {
+  const handleReviewScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
     if (reviews.length <= 1) {
       return;
     }
 
     const absoluteIndex = Math.round(
-      event.nativeEvent.contentOffset.x / reviewPageWidth
+      event.nativeEvent.contentOffset.x / reviewPageWidth,
     );
     const realIndex =
       ((absoluteIndex % reviews.length) + reviews.length) % reviews.length;
@@ -139,6 +244,20 @@ export default function PaywallScreen() {
     });
   };
 
+  if (authLoading && isNewUserEntry) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={PRIMARY_BRAND} />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (isNewUserEntry && profile) {
+    return <Redirect href="/(tabs)" />;
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
@@ -146,6 +265,7 @@ export default function PaywallScreen() {
         <TouchableOpacity
           style={styles.closeButton}
           onPress={() => router.back()}
+          disabled={continuing}
         >
           <X size={20} color="#999" />
         </TouchableOpacity>
@@ -160,18 +280,24 @@ export default function PaywallScreen() {
         </View>
 
         <View style={styles.titleWrapper}>
-          <Text style={styles.title}>Get Clarix Pro</Text>
+          <Text style={styles.title}>
+            {isNewUserEntry ? 'Choose your plan' : 'Get Clarix Pro'}
+          </Text>
         </View>
 
         <Text style={styles.subtitle}>
-          Get personalized insights to conquer your tasks 3x faster.
+          {isNewUserEntry
+            ? 'Start free today, or pick Pro to unlock premium insights when billing goes live.'
+            : 'Get personalized insights to conquer your tasks 3x faster.'}
         </Text>
 
         <View style={styles.awardContainer}>
           <Text style={styles.laurel}>*</Text>
           <View style={styles.awardTextContainer}>
             <Text style={styles.awardTextSmall}>Subscription Preview</Text>
-            <Text style={styles.awardTextBold}>Clarix Pro</Text>
+            <Text style={styles.awardTextBold}>
+              {isNewUserEntry ? 'New User Access' : 'Clarix Pro'}
+            </Text>
             <Text style={styles.awardTextSmall}>
               Billing integration still required
             </Text>
@@ -198,8 +324,8 @@ export default function PaywallScreen() {
               >
                 <Text style={styles.testimonialTitle}>{review.title}</Text>
                 <View style={styles.starsContainer}>
-                  {'*****'.split('').map((star, index) => (
-                    <Text key={index} style={styles.star}>
+                  {'*****'.split('').map((star, starIndex) => (
+                    <Text key={starIndex} style={styles.star}>
                       {star}
                     </Text>
                   ))}
@@ -216,104 +342,72 @@ export default function PaywallScreen() {
             <TouchableOpacity
               key={index}
               onPress={() => jumpToReview(index)}
-              style={[
-                styles.dot,
-                activeReviewIndex === index && styles.dotActive,
-              ]}
+              style={[styles.dot, activeReviewIndex === index && styles.dotActive]}
               activeOpacity={0.8}
             />
           ))}
         </View>
 
-        <View style={styles.pricingContainer}>
-          <TouchableOpacity
-            style={[
-              styles.pricingCard,
-              selectedPlan === 'monthly' && styles.pricingCardActive,
-            ]}
-            activeOpacity={0.9}
-            onPress={() => setSelectedPlan('monthly')}
-          >
-            {selectedPlan === 'monthly' ? (
-              <View style={styles.checkBadge}>
-                <Check size={14} color={PRIMARY_BRAND} strokeWidth={3} />
-              </View>
-            ) : null}
-            <Text
-              style={[
-                styles.pricingPeriod,
-                selectedPlan === 'monthly' && styles.textWhite,
-              ]}
-            >
-              1
-            </Text>
-            <Text
-              style={[
-                styles.pricingLabel,
-                selectedPlan === 'monthly' && styles.textWhite,
-              ]}
-            >
-              MONTH
-            </Text>
-            <Text
-              style={[
-                styles.pricingPrice,
-                selectedPlan === 'monthly' && styles.textWhite,
-              ]}
-            >
-              $6.99
-            </Text>
-          </TouchableOpacity>
+        <View
+          style={[
+            styles.pricingContainer,
+            isNewUserEntry ? styles.pricingContainerStacked : styles.pricingContainerRow,
+          ]}
+        >
+          {planOptions.map((plan) => {
+            const isSelected = selectedPlan === plan.id;
 
-          <TouchableOpacity
-            style={[
-              styles.pricingCard,
-              selectedPlan === 'yearly' && styles.pricingCardActive,
-            ]}
-            activeOpacity={0.9}
-            onPress={() => setSelectedPlan('yearly')}
-          >
-            {selectedPlan === 'yearly' ? (
-              <View style={styles.checkBadge}>
-                <Check size={14} color={PRIMARY_BRAND} strokeWidth={3} />
-              </View>
-            ) : null}
-            <View style={styles.saveBadge}>
-              <Text style={styles.saveBadgeText}>SAVE 28%</Text>
-            </View>
-            <Text
-              style={[
-                styles.pricingPeriod,
-                selectedPlan === 'yearly' && styles.textWhite,
-              ]}
-            >
-              12
-            </Text>
-            <Text
-              style={[
-                styles.pricingLabel,
-                selectedPlan === 'yearly' && styles.textWhite,
-              ]}
-            >
-              MONTHS
-            </Text>
-            <Text
-              style={[
-                styles.pricingPrice,
-                selectedPlan === 'yearly' && styles.textWhite,
-              ]}
-            >
-              $59.99
-            </Text>
-          </TouchableOpacity>
+            return (
+              <TouchableOpacity
+                key={plan.id}
+                style={[
+                  styles.pricingCard,
+                  isNewUserEntry ? styles.pricingCardFull : styles.pricingCardHalf,
+                  isSelected && styles.pricingCardActive,
+                ]}
+                activeOpacity={0.9}
+                onPress={() => setSelectedPlan(plan.id)}
+                disabled={continuing}
+              >
+                {isSelected ? (
+                  <View style={styles.checkBadge}>
+                    <Check size={14} color={PRIMARY_BRAND} strokeWidth={3} />
+                  </View>
+                ) : null}
+
+                {plan.badge ? (
+                  <View style={styles.saveBadge}>
+                    <Text style={styles.saveBadgeText}>{plan.badge}</Text>
+                  </View>
+                ) : null}
+
+                <Text style={[styles.pricingPeriod, isSelected && styles.textWhite]}>
+                  {plan.period}
+                </Text>
+                <Text style={[styles.pricingLabel, isSelected && styles.textWhite]}>
+                  {plan.label}
+                </Text>
+                <Text style={[styles.pricingPrice, isSelected && styles.textWhite]}>
+                  {plan.price}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
 
         <TouchableOpacity
-          style={styles.continueButton}
+          style={[styles.continueButton, continuing && styles.continueButtonDisabled]}
           activeOpacity={0.8}
-          onPress={showBillingPreview}
+          onPress={() => void handleContinue()}
+          disabled={continuing}
         >
-          <Text style={styles.continueButtonText}>Continue</Text>
+          {continuing ? (
+            <ActivityIndicator size="small" color="#fff" />
+          ) : (
+            <Text style={styles.continueButtonText}>
+              {isNewUserEntry && selectedPlan === 'free' ? 'Start Free' : 'Continue'}
+            </Text>
+          )}
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
@@ -324,6 +418,11 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#fff',
+  },
+  loadingContainer: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   header: {
     flexDirection: 'row',
@@ -460,14 +559,18 @@ const styles = StyleSheet.create({
     backgroundColor: PRIMARY_BRAND,
   },
   pricingContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
     width: '100%',
     gap: 12,
     marginBottom: 24,
   },
+  pricingContainerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  pricingContainerStacked: {
+    flexDirection: 'column',
+  },
   pricingCard: {
-    flex: 1,
     backgroundColor: '#F8F8F8',
     borderRadius: 16,
     paddingVertical: 18,
@@ -476,6 +579,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#EFEFEF',
     position: 'relative',
+  },
+  pricingCardHalf: {
+    flex: 1,
+  },
+  pricingCardFull: {
+    width: '100%',
   },
   pricingCardActive: {
     backgroundColor: PRIMARY_BRAND,
@@ -554,6 +663,9 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,
+  },
+  continueButtonDisabled: {
+    opacity: 0.7,
   },
   continueButtonText: {
     color: '#fff',

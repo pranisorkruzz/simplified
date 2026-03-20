@@ -9,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { Redirect, useRouter } from 'expo-router';
+import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
 import {
@@ -17,6 +17,8 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
+import { supabase } from '@/lib/supabase';
+import { UserType } from '@/types/database';
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -31,7 +33,20 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const { signIn, session, loading: authLoading } = useAuth();
   const router = useRouter();
+  const params = useLocalSearchParams<{
+    entry?: string | string[];
+    userType?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
+  const entryParam = Array.isArray(params.entry) ? params.entry[0] : params.entry;
+  const rawUserType = Array.isArray(params.userType)
+    ? params.userType[0]
+    : params.userType;
+  const userTypeParam: UserType | undefined =
+    rawUserType === 'student' || rawUserType === 'professional'
+      ? rawUserType
+      : undefined;
+  const isNewUserEntry = entryParam === 'new_user';
 
   if (!authLoading && session) {
     return <Redirect href="/" />;
@@ -48,7 +63,43 @@ export default function LoginScreen() {
 
     try {
       await signIn(email, password);
-      router.replace('/');
+      if (!isNewUserEntry) {
+        router.replace('/');
+        return;
+      }
+
+      const {
+        data: { user: authedUser },
+        error: userError,
+      } = await supabase.auth.getUser();
+
+      if (userError || !authedUser) {
+        router.replace('/');
+        return;
+      }
+
+      const { data: existingProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('id')
+        .eq('id', authedUser.id)
+        .maybeSingle();
+
+      if (profileError) {
+        throw profileError;
+      }
+
+      if (existingProfile) {
+        router.replace('/');
+        return;
+      }
+
+      router.replace({
+        pathname: '/paywall',
+        params: {
+          entry: 'new_user',
+          ...(userTypeParam ? { userType: userTypeParam } : {}),
+        },
+      });
     } catch (err: any) {
       setError(err.message || 'Failed to sign in');
     } finally {
@@ -151,7 +202,17 @@ export default function LoginScreen() {
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Do not have an account?</Text>
-            <TouchableOpacity onPress={() => router.push('/signup')}>
+            <TouchableOpacity
+              onPress={() =>
+                router.push({
+                  pathname: '/signup',
+                  params: {
+                    ...(isNewUserEntry ? { entry: 'new_user' } : {}),
+                    ...(userTypeParam ? { userType: userTypeParam } : {}),
+                  },
+                })
+              }
+            >
               <Text style={styles.link}>Sign Up</Text>
             </TouchableOpacity>
           </View>

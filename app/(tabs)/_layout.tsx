@@ -24,7 +24,14 @@ export default function TabLayout() {
   }
 
   if (!profile) {
-    return <Redirect href="/onboarding" />;
+    return (
+      <Redirect
+        href={{
+          pathname: '/paywall',
+          params: { entry: 'new_user' },
+        }}
+      />
+    );
   }
 
   return (

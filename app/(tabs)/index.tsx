@@ -35,7 +35,9 @@ import {
   supabase,
 } from '@/lib/supabase';
 
-import BriefCardItem, { BriefCardType as BriefCard } from '@/components/BriefCard';
+import BriefCardItem, {
+  BriefCardType as BriefCard,
+} from '@/components/BriefCard';
 import BriefsHero from '@/components/BriefsHero';
 import BriefComposer from '@/components/BriefComposer';
 
@@ -66,11 +68,14 @@ async function fetchBriefsData(userId: string) {
 
   const briefPayloadById = isMissingColumnError(
     briefPayloadQuery.error,
-    'brief_payload'
+    'brief_payload',
   )
     ? new Map<string, unknown | null>()
     : new Map(
-        (briefPayloadQuery.data ?? []).map((chat) => [chat.id, chat.brief_payload])
+        (briefPayloadQuery.data ?? []).map((chat) => [
+          chat.id,
+          chat.brief_payload,
+        ]),
       );
 
   const chatsData = (baseChatsQuery.data ?? []).map((chat) => ({
@@ -95,7 +100,7 @@ function mapBriefCards(
     brief_payload?: unknown | null;
     created_at: string;
   }[],
-  linkedTaskIds: Set<string>
+  linkedTaskIds: Set<string>,
 ) {
   return chatsData
     .map((chat) => {
@@ -163,8 +168,6 @@ const DISPLAY_FONT = Platform.select({
   android: 'serif',
   default: 'serif',
 });
-
-
 
 export default function BriefsScreen() {
   const { user } = useAuth();
@@ -473,5 +476,4 @@ const styles = StyleSheet.create({
     lineHeight: 21,
     textAlign: 'center',
   },
-
 });

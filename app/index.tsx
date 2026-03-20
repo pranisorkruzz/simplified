@@ -7,11 +7,18 @@ export default function Index() {
 
   if (!loading) {
     if (!session) {
-      return <Redirect href="/login" />;
+      return <Redirect href="/onboarding" />;
     }
 
     if (!profile) {
-      return <Redirect href="/onboarding" />;
+      return (
+        <Redirect
+          href={{
+            pathname: '/paywall',
+            params: { entry: 'new_user' },
+          }}
+        />
+      );
     }
 
     return <Redirect href="/(tabs)" />;
