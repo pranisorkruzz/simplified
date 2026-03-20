@@ -1,40 +1,28 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  Animated,
   LayoutAnimation,
-  Modal,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   UIManager,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   CheckCheck,
-  Clock3,
-  Pencil,
-  RotateCcw,
   Sparkles,
-  Trash2,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { EmailBrief, readBriefFromRecord } from '@/lib/briefs';
-import {
-  getSupabaseErrorMessage,
-  isMissingColumnError,
-  supabase,
-} from '@/lib/supabase';
-import TaskCard, { TaskRow } from '@/components/TaskCard';
+import { fetchTaskFeed } from '@/lib/data';
+import { getSupabaseErrorMessage, supabase } from '@/lib/supabase';
+import TaskCard from '@/components/TaskCard';
 import DeadlineModal from '@/components/DeadlineModal';
+import { TaskRow } from '@/types/database';
 import { formatDeadlineInputValue, parseManualDeadlineInput } from '@/utils/formatters';
 
 const DISPLAY_FONT = Platform.select({
@@ -50,132 +38,6 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-async function fetchTasksData(userId: string) {
-  const tasksWithDeadlineQuery = await supabase
-    .from('tasks')
-    .select(
-      'id, user_id, chat_id, title, order_index, completed, created_at, deadline_at, chat:chats(message)'
-    )
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false })
-    .order('order_index', { ascending: true });
-
-  const tasksWithoutDeadlineQuery = isMissingColumnError(
-    tasksWithDeadlineQuery.error,
-    'deadline_at'
-  )
-    ? await supabase
-        .from('tasks')
-        .select(
-          'id, user_id, chat_id, title, order_index, completed, created_at, chat:chats(message)'
-        )
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false })
-        .order('order_index', { ascending: true })
-    : null;
-
-  const baseTasksData = tasksWithDeadlineQuery.data
-    ? tasksWithDeadlineQuery.data
-    : (tasksWithoutDeadlineQuery?.data ?? []).map((task) => ({
-        ...task,
-        deadline_at: null,
-      }));
-
-  const baseTasksError =
-    tasksWithDeadlineQuery.error &&
-    !isMissingColumnError(tasksWithDeadlineQuery.error, 'deadline_at')
-      ? tasksWithDeadlineQuery.error
-      : tasksWithoutDeadlineQuery?.error ?? null;
-
-  if (baseTasksError) {
-    return {
-      data: null,
-      error: baseTasksError,
-      deadlineFeatureAvailable: !isMissingColumnError(
-        tasksWithDeadlineQuery.error,
-        'deadline_at'
-      ),
-    };
-  }
-
-  const chatIds = Array.from(
-    new Set(
-      (baseTasksData ?? [])
-        .map((task) => task.chat_id)
-        .filter((chatId): chatId is string => Boolean(chatId))
-    )
-  );
-
-  if (chatIds.length === 0) {
-    return {
-      data: baseTasksData,
-      error: null,
-      deadlineFeatureAvailable: !isMissingColumnError(
-        tasksWithDeadlineQuery.error,
-        'deadline_at'
-      ),
-    };
-  }
-
-  const briefPayloadQuery = await supabase
-    .from('chats')
-    .select('id, brief_payload')
-    .in('id', chatIds);
-
-  const briefPayloadByChatId = isMissingColumnError(
-    briefPayloadQuery.error,
-    'brief_payload'
-  )
-    ? new Map<string, unknown | null>()
-    : new Map(
-        (briefPayloadQuery.data ?? []).map((chat) => [chat.id, chat.brief_payload])
-      );
-
-  const data = (baseTasksData ?? []).map((task) => {
-    const chatRecord = Array.isArray(task.chat) ? task.chat[0] : task.chat;
-
-    return {
-      ...task,
-      chat: chatRecord
-        ? {
-            ...chatRecord,
-            brief_payload: task.chat_id
-              ? briefPayloadByChatId.get(task.chat_id) ?? null
-              : null,
-          }
-        : null,
-    };
-  });
-
-  const error =
-    briefPayloadQuery.error &&
-    !isMissingColumnError(briefPayloadQuery.error, 'brief_payload')
-      ? briefPayloadQuery.error
-      : null;
-
-  return {
-    data,
-    error,
-    deadlineFeatureAvailable: !isMissingColumnError(
-      tasksWithDeadlineQuery.error,
-      'deadline_at'
-    ),
-  };
-}
-
-
-
-function mapTaskRows(data: any[]): TaskRow[] {
-  return data.map((task: any) => {
-    return {
-      ...task,
-      brief: task.chat ? readBriefFromRecord(task.chat) : null,
-    } as TaskRow;
-  });
-}
-
-
-
 export default function TasksScreen() {
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
@@ -188,6 +50,18 @@ export default function TasksScreen() {
   const [screenError, setScreenError] = useState('');
   const [deadlineFeatureAvailable, setDeadlineFeatureAvailable] = useState(true);
   const [savingDeadline, setSavingDeadline] = useState(false);
+
+  const applyTaskFeed = (
+    feed: Awaited<ReturnType<typeof fetchTaskFeed>>,
+  ) => {
+    setTasks(feed.tasks);
+    setDeadlineFeatureAvailable(feed.deadlineFeatureAvailable);
+    setScreenError(
+      !feed.deadlineFeatureAvailable
+        ? 'Deadline storage is unavailable until the latest Supabase migration is applied.'
+        : '',
+    );
+  };
 
   const loadTasks = async (mode: 'initial' | 'refresh' = 'initial') => {
     if (!user) {
@@ -203,29 +77,20 @@ export default function TasksScreen() {
       setLoading(true);
     }
 
-    const { data, error, deadlineFeatureAvailable: nextDeadlineAvailability } =
-      await fetchTasksData(user.id);
-
-    setDeadlineFeatureAvailable(nextDeadlineAvailability);
-    setScreenError(
-      !nextDeadlineAvailability
-        ? 'Deadline storage is unavailable until the latest Supabase migration is applied.'
-        : ''
-    );
-
-    if (!error && data) {
-      setTasks(mapTaskRows(data));
-    } else if (error) {
+    try {
+      applyTaskFeed(await fetchTaskFeed(user.id));
+    } catch (error) {
       setScreenError(getSupabaseErrorMessage(error, 'Failed to load tasks'));
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    setLoading(false);
-    setRefreshing(false);
   };
 
   useEffect(() => {
     if (!user) {
       setTasks([]);
+      setScreenError('');
       setLoading(false);
       return;
     }
@@ -234,30 +99,26 @@ export default function TasksScreen() {
 
     const loadInitialTasks = async () => {
       setLoading(true);
-      const {
-        data,
-        error,
-        deadlineFeatureAvailable: nextDeadlineAvailability,
-      } = await fetchTasksData(user.id);
 
-      if (!active) {
-        return;
-      }
+      try {
+        const feed = await fetchTaskFeed(user.id);
 
-      setDeadlineFeatureAvailable(nextDeadlineAvailability);
-      setScreenError(
-        !nextDeadlineAvailability
-          ? 'Deadline storage is unavailable until the latest Supabase migration is applied.'
-          : ''
-      );
+        if (!active) {
+          return;
+        }
 
-      if (!error && data) {
-        setTasks(mapTaskRows(data));
-      } else if (error) {
+        applyTaskFeed(feed);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
         setScreenError(getSupabaseErrorMessage(error, 'Failed to load tasks'));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-
-      setLoading(false);
     };
 
     void loadInitialTasks();
@@ -270,34 +131,47 @@ export default function TasksScreen() {
   const toggleTask = async (task: TaskRow) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-    const { error } = await supabase
-      .from('tasks')
-      .update({ completed: !task.completed })
-      .eq('id', task.id);
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ completed: !task.completed })
+        .eq('id', task.id);
 
-    if (!error) {
+      if (error) {
+        throw error;
+      }
+
       setTasks((prev) =>
         prev.map((item) =>
-          item.id === task.id ? { ...item, completed: !task.completed } : item
-        )
+          item.id === task.id ? { ...item, completed: !task.completed } : item,
+        ),
       );
-
+      setScreenError('');
       await Haptics.notificationAsync(
         task.completed
           ? Haptics.NotificationFeedbackType.Warning
-          : Haptics.NotificationFeedbackType.Success
+          : Haptics.NotificationFeedbackType.Success,
       );
+    } catch (error) {
+      setScreenError(getSupabaseErrorMessage(error, 'Failed to update task'));
     }
   };
 
   const deleteTask = async (task: TaskRow) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
 
-    const { error } = await supabase.from('tasks').delete().eq('id', task.id);
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('id', task.id);
 
-    if (!error) {
+      if (error) {
+        throw error;
+      }
+
       setTasks((prev) => prev.filter((item) => item.id !== task.id));
+      setScreenError('');
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    } catch (error) {
+      setScreenError(getSupabaseErrorMessage(error, 'Failed to delete task'));
     }
   };
 
@@ -350,9 +224,10 @@ export default function TasksScreen() {
 
     setTasks((prev) =>
       prev.map((task) =>
-        task.id === deadlineTask.id ? { ...task, deadline_at: parsedDeadline } : task
-      )
+        task.id === deadlineTask.id ? { ...task, deadline_at: parsedDeadline } : task,
+      ),
     );
+    setScreenError('');
     await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     closeDeadlineEditor();
   };
@@ -377,9 +252,10 @@ export default function TasksScreen() {
 
     setTasks((prev) =>
       prev.map((task) =>
-        task.id === deadlineTask.id ? { ...task, deadline_at: null } : task
-      )
+        task.id === deadlineTask.id ? { ...task, deadline_at: null } : task,
+      ),
     );
+    setScreenError('');
     await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     closeDeadlineEditor();
   };

@@ -15,18 +15,12 @@ import {
   Clock3,
   Plus,
 } from 'lucide-react-native';
-import { EmailBrief } from '@/lib/briefs';
+import { BriefCardData } from '@/types/database';
 import {
   getPriorityColors,
   formatTimeLeft,
   formatCreatedTimeLabel,
 } from '@/utils/formatters';
-
-export type BriefCardType = EmailBrief & {
-  id: string;
-  createdAt: string;
-  addedToTasks: boolean;
-};
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -40,10 +34,10 @@ export default function BriefCardItem({
   submittingId,
   onAddToTasks,
 }: {
-  brief: BriefCardType;
+  brief: BriefCardData;
   index: number;
   submittingId: string | null;
-  onAddToTasks: (brief: BriefCardType) => Promise<void>;
+  onAddToTasks: (brief: BriefCardData) => Promise<void>;
 }) {
   const entrance = useRef(new Animated.Value(0)).current;
   const priorityColors = getPriorityColors(brief.priority);

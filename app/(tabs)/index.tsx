@@ -1,167 +1,33 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
-  Animated,
-  Easing,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
-  TouchableOpacity,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
   SafeAreaView,
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
-import {
-  ArrowRight,
-  CheckCheck,
-  Clock3,
-  Plus,
-  Sparkles,
-} from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { createBriefFromEmail } from '@/lib/gemini';
-import { EmailBrief, readBriefFromRecord } from '@/lib/briefs';
 import {
-  getSupabaseErrorMessage,
-  isMissingColumnError,
-  supabase,
-} from '@/lib/supabase';
-
-import BriefCardItem, {
-  BriefCardType as BriefCard,
-} from '@/components/BriefCard';
+  buildBriefCards,
+  buildLinkedTaskIds,
+  buildTaskStats,
+  fetchBriefFeed,
+  insertTasksForBrief,
+} from '@/lib/data';
+import { createBriefFromEmail } from '@/lib/gemini';
+import { getSupabaseErrorMessage } from '@/lib/supabase';
+import { BriefCardData } from '@/types/database';
+import BriefCardItem from '@/components/BriefCard';
 import BriefsHero from '@/components/BriefsHero';
 import BriefComposer from '@/components/BriefComposer';
-
-async function fetchBriefsData(userId: string) {
-  const baseChatsQuery = await supabase
-    .from('chats')
-    .select('id, role, message, created_at')
-    .eq('user_id', userId)
-    .order('created_at', { ascending: false });
-
-  const tasksQuery = await supabase
-    .from('tasks')
-    .select('chat_id, completed')
-    .eq('user_id', userId);
-
-  if (baseChatsQuery.error) {
-    return {
-      chatsData: null,
-      chatsError: baseChatsQuery.error,
-      tasksData: tasksQuery.data,
-    };
-  }
-
-  const briefPayloadQuery = await supabase
-    .from('chats')
-    .select('id, brief_payload')
-    .eq('user_id', userId);
-
-  const briefPayloadById = isMissingColumnError(
-    briefPayloadQuery.error,
-    'brief_payload',
-  )
-    ? new Map<string, unknown | null>()
-    : new Map(
-        (briefPayloadQuery.data ?? []).map((chat) => [
-          chat.id,
-          chat.brief_payload,
-        ]),
-      );
-
-  const chatsData = (baseChatsQuery.data ?? []).map((chat) => ({
-    ...chat,
-    brief_payload: briefPayloadById.get(chat.id) ?? null,
-  }));
-  const chatsError =
-    briefPayloadQuery.error &&
-    !isMissingColumnError(briefPayloadQuery.error, 'brief_payload')
-      ? briefPayloadQuery.error
-      : null;
-  const tasksData = tasksQuery.data;
-
-  return { chatsData, chatsError, tasksData };
-}
-
-function mapBriefCards(
-  chatsData: {
-    id: string;
-    role: string;
-    message: string;
-    brief_payload?: unknown | null;
-    created_at: string;
-  }[],
-  linkedTaskIds: Set<string>,
-) {
-  return chatsData
-    .map((chat) => {
-      if (chat.role !== 'assistant') {
-        return null;
-      }
-
-      const brief = readBriefFromRecord(chat);
-
-      if (!brief) {
-        return null;
-      }
-
-      return {
-        ...brief,
-        id: chat.id,
-        createdAt: chat.created_at,
-        addedToTasks: linkedTaskIds.has(chat.id),
-      } satisfies BriefCard;
-    })
-    .filter((brief): brief is BriefCard => Boolean(brief));
-}
-
-async function insertTasksForBrief(userId: string, brief: BriefCard) {
-  const baseRows = brief.actionItems.map((item, index) => ({
-    user_id: userId,
-    chat_id: brief.id,
-    title: item,
-    order_index: index,
-    completed: false,
-  }));
-
-  if (!brief.deadlineAt) {
-    return {
-      ...(await supabase.from('tasks').insert(baseRows)),
-      insertedWithoutDeadline: false,
-    };
-  }
-
-  const { error } = await supabase.from('tasks').insert(
-    baseRows.map((row) => ({
-      ...row,
-      deadline_at: brief.deadlineAt,
-    })),
-  );
-
-  if (!error) {
-    return { error: null, insertedWithoutDeadline: false };
-  }
-
-  if (!isMissingColumnError(error, 'deadline_at')) {
-    return { error, insertedWithoutDeadline: false };
-  }
-
-  const retry = await supabase.from('tasks').insert(baseRows);
-
-  return {
-    ...retry,
-    insertedWithoutDeadline: !retry.error,
-  };
-}
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -173,7 +39,7 @@ export default function BriefsScreen() {
   const { user } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [briefs, setBriefs] = useState<BriefCard[]>([]);
+  const [briefs, setBriefs] = useState<BriefCardData[]>([]);
   const [draftEmail, setDraftEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -185,9 +51,16 @@ export default function BriefsScreen() {
     finished: 0,
   });
 
+  const applyBriefFeed = (feed: Awaited<ReturnType<typeof fetchBriefFeed>>) => {
+    setBriefs(buildBriefCards(feed.chats, buildLinkedTaskIds(feed.tasks)));
+    setTaskStats(buildTaskStats(feed.tasks));
+    setErrorMessage('');
+  };
+
   const loadBriefs = async (mode: 'initial' | 'refresh' = 'initial') => {
     if (!user) {
       setBriefs([]);
+      setErrorMessage('');
       setLoading(false);
       setRefreshing(false);
       return;
@@ -199,35 +72,21 @@ export default function BriefsScreen() {
       setLoading(true);
     }
 
-    const { chatsData, chatsError, tasksData } = await fetchBriefsData(user.id);
-
-    if (chatsError) {
-      setErrorMessage(chatsError.message);
+    try {
+      const feed = await fetchBriefFeed(user.id);
+      applyBriefFeed(feed);
+    } catch (error) {
+      setErrorMessage(getSupabaseErrorMessage(error, 'Failed to load briefs'));
+    } finally {
       setLoading(false);
       setRefreshing(false);
-      return;
     }
-
-    const linkedTaskIds = new Set(
-      (tasksData ?? [])
-        .map((task: { chat_id: string | null }) => task.chat_id)
-        .filter((chatId): chatId is string => Boolean(chatId)),
-    );
-
-    const nextBriefs = mapBriefCards(chatsData ?? [], linkedTaskIds);
-
-    setBriefs(nextBriefs);
-    setTaskStats({
-      active: (tasksData ?? []).filter((task) => !task.completed).length,
-      finished: (tasksData ?? []).filter((task) => task.completed).length,
-    });
-    setLoading(false);
-    setRefreshing(false);
   };
 
   useEffect(() => {
     if (!user) {
       setBriefs([]);
+      setErrorMessage('');
       setLoading(false);
       return;
     }
@@ -236,34 +95,26 @@ export default function BriefsScreen() {
 
     const loadInitialBriefs = async () => {
       setLoading(true);
-      const { chatsData, chatsError, tasksData } = await fetchBriefsData(
-        user.id,
-      );
 
-      if (!active) {
-        return;
+      try {
+        const feed = await fetchBriefFeed(user.id);
+
+        if (!active) {
+          return;
+        }
+
+        applyBriefFeed(feed);
+      } catch (error) {
+        if (!active) {
+          return;
+        }
+
+        setErrorMessage(getSupabaseErrorMessage(error, 'Failed to load briefs'));
+      } finally {
+        if (active) {
+          setLoading(false);
+        }
       }
-
-      if (chatsError) {
-        setErrorMessage(chatsError.message);
-        setLoading(false);
-        return;
-      }
-
-      const linkedTaskIds = new Set(
-        (tasksData ?? [])
-          .map((task: { chat_id: string | null }) => task.chat_id)
-          .filter((chatId): chatId is string => Boolean(chatId)),
-      );
-
-      const nextBriefs = mapBriefCards(chatsData ?? [], linkedTaskIds);
-
-      setBriefs(nextBriefs);
-      setTaskStats({
-        active: (tasksData ?? []).filter((task) => !task.completed).length,
-        finished: (tasksData ?? []).filter((task) => task.completed).length,
-      });
-      setLoading(false);
     };
 
     void loadInitialBriefs();
@@ -309,7 +160,7 @@ export default function BriefsScreen() {
     }
   };
 
-  const handleAddToTasks = async (brief: BriefCard) => {
+  const handleAddToTasks = async (brief: BriefCardData) => {
     if (!user) {
       return;
     }
