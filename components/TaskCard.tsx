@@ -13,8 +13,7 @@ import {
   RotateCcw,
   Trash2,
 } from 'lucide-react-native';
-import { EmailBrief } from '@/lib/briefs';
-import { Task } from '@/types/database';
+import { TaskRow } from '@/types/database';
 import {
   getPriorityColors,
   getDeadlineTone,
@@ -22,11 +21,6 @@ import {
   formatCreatedLabel,
   formatDateLabel,
 } from '@/utils/formatters';
-
-export type TaskRow = Task & {
-  chat?: { message: string; brief_payload?: unknown | null } | null;
-  brief: EmailBrief | null;
-};
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',

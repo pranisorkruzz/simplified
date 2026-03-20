@@ -19,6 +19,12 @@ export interface Chat {
   created_at: string;
 }
 
+export interface BriefCardData extends EmailBrief {
+  id: string;
+  createdAt: string;
+  addedToTasks: boolean;
+}
+
 export interface Task {
   id: string;
   user_id: string;
@@ -28,4 +34,14 @@ export interface Task {
   completed: boolean;
   created_at: string;
   deadline_at: string | null;
+}
+
+export interface TaskChatRecord {
+  message: string;
+  brief_payload?: unknown | null;
+}
+
+export interface TaskRow extends Task {
+  chat?: TaskChatRecord | null;
+  brief: EmailBrief | null;
 }
