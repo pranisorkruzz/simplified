@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
-import { X } from 'lucide-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   FollowUpQuestion,
   UserAiContext,
@@ -71,6 +71,7 @@ export default function BriefFollowUpSheet({
 }) {
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [sheetError, setSheetError] = useState('');
+  const insets = useSafeAreaInsets();
 
   useEffect(() => {
     if (!visible) {
@@ -173,13 +174,19 @@ export default function BriefFollowUpSheet({
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={onClose}
+      onRequestClose={() => {}}
     >
       <View style={styles.backdrop}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardView}
         >
-          <View style={styles.sheet}>
+          <View
+            style={[
+              styles.sheet,
+              { paddingBottom: Math.max(insets.bottom, 24) },
+            ]}
+          >
             <View style={styles.header}>
               <View style={styles.headerCopy}>
                 <Text style={styles.eyebrow}>PERSONALIZE CLARIX</Text>
@@ -188,14 +195,6 @@ export default function BriefFollowUpSheet({
                   Answer these so Clarix can tailor future breakdowns around {headerName}.
                 </Text>
               </View>
-
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={onClose}
-                activeOpacity={0.8}
-              >
-                <X size={18} color="#5A6A63" />
-              </TouchableOpacity>
             </View>
 
             <ScrollView
@@ -280,15 +279,6 @@ export default function BriefFollowUpSheet({
 
             <View style={styles.actions}>
               <TouchableOpacity
-                style={styles.secondaryButton}
-                onPress={onClose}
-                activeOpacity={0.85}
-                disabled={saving}
-              >
-                <Text style={styles.secondaryButtonText}>Later</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
                 style={[
                   styles.primaryButton,
                   (!isComplete || saving) && styles.primaryButtonDisabled,
@@ -313,9 +303,28 @@ export default function BriefFollowUpSheet({
 
 const styles = StyleSheet.create({
   backdrop: {
-    flex: 1,
+    ...Platform.select({
+      web: {
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+      },
+      default: {
+        flex: 1,
+      },
+    }),
     backgroundColor: 'rgba(16, 45, 36, 0.34)',
     justifyContent: 'flex-end',
+    alignItems: 'center',
+  },
+  keyboardView: {
+    width: '100%',
+    maxWidth: Platform.OS === 'web' ? 600 : '100%',
+    alignSelf: 'center',
+    justifyContent: 'flex-end',
+    height: '100%',
   },
   sheet: {
     backgroundColor: '#FBF8F2',
@@ -323,8 +332,9 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingHorizontal: 20,
     paddingTop: 18,
-    paddingBottom: 24,
-    maxHeight: '88%',
+    // paddingBottom handled via inline styles
+    height: '80%',
+    width: '100%',
   },
   header: {
     flexDirection: 'row',
@@ -363,6 +373,7 @@ const styles = StyleSheet.create({
   },
   scrollArea: {
     marginTop: 18,
+    flex: 1,
   },
   scrollContent: {
     gap: 18,

@@ -42,7 +42,9 @@ export default function LoginScreen() {
     userType?: string | string[];
   }>();
   const insets = useSafeAreaInsets();
-  const entryParam = Array.isArray(params.entry) ? params.entry[0] : params.entry;
+  const entryParam = Array.isArray(params.entry)
+    ? params.entry[0]
+    : params.entry;
   const rawUserType = Array.isArray(params.userType)
     ? params.userType[0]
     : params.userType;
