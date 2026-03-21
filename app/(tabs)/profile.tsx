@@ -110,12 +110,16 @@ export default function ProfileScreen() {
           <View style={styles.heroRow}>
             <View style={styles.avatarWrap}>
               <Text style={styles.avatarText}>
-                {user?.email?.charAt(0).toUpperCase() || 'U'}
+                {profile?.first_name?.charAt(0).toUpperCase() ||
+                  user?.email?.charAt(0).toUpperCase() ||
+                  'U'}
               </Text>
             </View>
             <View style={styles.userInfo}>
               <Text style={styles.emailText} numberOfLines={1}>
-                {user?.email || 'User Name'}
+                {profile?.first_name
+                  ? `${profile.first_name} ${profile.last_name || ''}`.trim()
+                  : user?.email || 'User Name'}
               </Text>
               <View style={styles.badgeWrap}>
                 {isStudent ? (
@@ -159,7 +163,10 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.menuGroup}>
-          <TouchableOpacity style={styles.menuItem}>
+          <TouchableOpacity
+            style={styles.menuItem}
+            onPress={() => router.push('/personal-info')}
+          >
             <View style={[styles.iconBox, { backgroundColor: '#E8EFEA' }]}>
               <User size={20} color="#1C6A57" />
             </View>

@@ -1,10 +1,6 @@
 import { Redirect, Tabs } from 'expo-router';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
-import {
-  CheckSquare,
-  MessageSquare,
-  User,
-} from 'lucide-react-native';
+import { CheckSquare, MessageSquare, User } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import FloatingTabBar from '@/components/FloatingTabBar';
 

@@ -14,7 +14,12 @@ interface AuthContextType {
     password: string
   ) => Promise<{ emailConfirmationRequired: boolean }>;
   signOut: () => Promise<void>;
-  updateProfile: (userType: 'student' | 'professional') => Promise<void>;
+  updateProfile: (updates: {
+    user_type?: 'student' | 'professional';
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -94,16 +99,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const updateProfile = async (userType: 'student' | 'professional') => {
+  const updateProfile = async (updates: {
+    user_type?: 'student' | 'professional';
+    first_name?: string;
+    last_name?: string;
+    avatar_url?: string;
+  }) => {
     if (!user) throw new Error('No user logged in');
 
     const { data, error } = await supabase
       .from('profiles')
-      .upsert({
-        id: user.id,
-        user_type: userType,
+      .update({
+        ...updates,
         updated_at: new Date().toISOString(),
       })
+      .eq('id', user.id)
       .select()
       .single();
 
