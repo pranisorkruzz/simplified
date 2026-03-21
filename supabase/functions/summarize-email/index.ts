@@ -27,6 +27,15 @@ type GeminiErrorResponse = {
   };
 };
 
+type UserAiContextResponse = {
+  question?: string;
+  answer?: string;
+};
+
+type UserAiContext = {
+  responses?: UserAiContextResponse[];
+};
+
 type PostgrestErrorLike = {
   code?: string;
   details?: string;
@@ -174,9 +183,50 @@ function parseEmailBrief(raw: string): EmailBrief | null {
   }
 }
 
-async function requestGemini(emailText: string): Promise<EmailBrief> {
+function readUserAiContextFromMetadata(metadata: unknown): UserAiContext | null {
+  if (!metadata || typeof metadata !== 'object') {
+    return null;
+  }
+
+  const aiContext = (metadata as { ai_context?: unknown }).ai_context;
+
+  if (!aiContext || typeof aiContext !== 'object') {
+    return null;
+  }
+
+  const responses = (aiContext as UserAiContext).responses;
+
+  if (!Array.isArray(responses) || responses.length === 0) {
+    return null;
+  }
+
+  return {
+    responses: responses.filter(
+      (response) =>
+        Boolean(response?.question?.trim()) && Boolean(response?.answer?.trim()),
+    ),
+  };
+}
+
+function buildAiContextPrompt(context: UserAiContext | null) {
+  if (!context?.responses?.length) {
+    return '';
+  }
+
+  const lines = context.responses
+    .map((response) => `- ${response.question}: ${response.answer}`)
+    .join('\n');
+
+  return `\nUser-specific context to respect:\n${lines}\n`;
+}
+
+async function requestGemini(
+  emailText: string,
+  userContext: UserAiContext | null,
+): Promise<EmailBrief> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
   const model = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest';
+  const userContextPrompt = buildAiContextPrompt(userContext);
 
   if (!apiKey) {
     throw new Error('Missing GEMINI_API_KEY');
@@ -208,6 +258,7 @@ Rules:
 - Start each action item with a verb.
 - Do not wrap the JSON in markdown fences.
 - Extract the most important next action, not every possible task.
+${userContextPrompt}
 
 Email:
 ${emailText}`;
@@ -292,9 +343,10 @@ Deno.serve(async (request) => {
   }
 
   const trimmedEmail = emailText.trim().slice(0, 12000);
+  const userContext = readUserAiContextFromMetadata(user.user_metadata);
 
   try {
-    const brief = await requestGemini(trimmedEmail);
+    const brief = await requestGemini(trimmedEmail, userContext);
     const assistantMessage = JSON.stringify(brief);
     const insertWithBriefPayload = await supabase
       .from('chats')

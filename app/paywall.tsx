@@ -158,7 +158,7 @@ export default function PaywallScreen() {
           return;
         }
 
-        await updateProfile(userTypeParam);
+        await updateProfile({ user_type: userTypeParam });
       }
 
       if (selectedPlan === 'free') {

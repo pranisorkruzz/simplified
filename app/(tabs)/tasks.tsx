@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
   Alert,
@@ -66,7 +67,7 @@ export default function TasksScreen() {
   const [savingDeadline, setSavingDeadline] = useState(false);
   const [selectedActiveFilter, setSelectedActiveFilter] = useState(ALL_ACTIVE_FILTER);
 
-  const applyTaskFeed = (
+  const applyTaskFeed = useCallback((
     feed: Awaited<ReturnType<typeof fetchTaskFeed>>,
   ) => {
     setTasks(feed.tasks);
@@ -76,11 +77,14 @@ export default function TasksScreen() {
         ? 'Deadline storage is unavailable until the latest Supabase migration is applied.'
         : '',
     );
-  };
+  }, []);
 
-  const loadTasks = async (mode: 'initial' | 'refresh' = 'initial') => {
+  const loadTasks = useCallback(async (
+    mode: 'initial' | 'refresh' | 'focus' = 'initial',
+  ) => {
     if (!user) {
       setTasks([]);
+      setScreenError('');
       setLoading(false);
       setRefreshing(false);
       return;
@@ -88,7 +92,7 @@ export default function TasksScreen() {
 
     if (mode === 'refresh') {
       setRefreshing(true);
-    } else {
+    } else if (mode === 'initial') {
       setLoading(true);
     }
 
@@ -100,48 +104,13 @@ export default function TasksScreen() {
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [applyTaskFeed, user]);
 
-  useEffect(() => {
-    if (!user) {
-      setTasks([]);
-      setScreenError('');
-      setLoading(false);
-      return;
-    }
-
-    let active = true;
-
-    const loadInitialTasks = async () => {
-      setLoading(true);
-
-      try {
-        const feed = await fetchTaskFeed(user.id);
-
-        if (!active) {
-          return;
-        }
-
-        applyTaskFeed(feed);
-      } catch (error) {
-        if (!active) {
-          return;
-        }
-
-        setScreenError(getSupabaseErrorMessage(error, 'Failed to load tasks'));
-      } finally {
-        if (active) {
-          setLoading(false);
-        }
-      }
-    };
-
-    void loadInitialTasks();
-
-    return () => {
-      active = false;
-    };
-  }, [user]);
+  useFocusEffect(
+    useCallback(() => {
+      void loadTasks('focus');
+    }, [loadTasks]),
+  );
 
   const toggleTask = async (task: TaskRow) => {
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);

@@ -149,6 +149,18 @@ export async function insertTasksForBrief(userId: string, brief: BriefCardData) 
   };
 }
 
+export async function deleteBriefsByIds(userId: string, briefIds: string[]) {
+  if (briefIds.length === 0) {
+    return { error: null };
+  }
+
+  return supabase
+    .from('chats')
+    .delete()
+    .eq('user_id', userId)
+    .in('id', briefIds);
+}
+
 export async function fetchTaskFeed(userId: string) {
   const tasksWithDeadlineQuery = await supabase
     .from('tasks')
