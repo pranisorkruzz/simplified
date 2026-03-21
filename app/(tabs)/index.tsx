@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -19,13 +21,21 @@ import {
   buildBriefCards,
   buildLinkedTaskIds,
   buildTaskStats,
+  deleteBriefsByIds,
   fetchBriefFeed,
   insertTasksForBrief,
 } from '@/lib/data';
+import {
+  buildUserAiContext,
+  getFollowUpQuestions,
+  readUserAiContextFromMetadata,
+  UserAiContextResponse,
+} from '@/lib/ai-context';
 import { createBriefFromEmail } from '@/lib/gemini';
 import { getSupabaseErrorMessage } from '@/lib/supabase';
 import { BriefCardData } from '@/types/database';
 import BriefCardItem from '@/components/BriefCard';
+import BriefFollowUpSheet from '@/components/BriefFollowUpSheet';
 import BriefsHero from '@/components/BriefsHero';
 import BriefComposer from '@/components/BriefComposer';
 
@@ -36,7 +46,7 @@ const DISPLAY_FONT = Platform.select({
 });
 
 export default function BriefsScreen() {
-  const { user } = useAuth();
+  const { user, profile, updateAiContext } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [briefs, setBriefs] = useState<BriefCardData[]>([]);
@@ -45,11 +55,18 @@ export default function BriefsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [submittingId, setSubmittingId] = useState<string | null>(null);
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedBriefIds, setSelectedBriefIds] = useState<string[]>([]);
+  const [deleting, setDeleting] = useState(false);
+  const [followUpVisible, setFollowUpVisible] = useState(false);
+  const [savingFollowUp, setSavingFollowUp] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [taskStats, setTaskStats] = useState({
     active: 0,
     finished: 0,
   });
+  const followUpQuestions = getFollowUpQuestions(profile?.user_type);
+  const existingAiContext = readUserAiContextFromMetadata(user?.user_metadata);
 
   const applyBriefFeed = (feed: Awaited<ReturnType<typeof fetchBriefFeed>>) => {
     setBriefs(buildBriefCards(feed.chats, buildLinkedTaskIds(feed.tasks)));
@@ -124,6 +141,12 @@ export default function BriefsScreen() {
     };
   }, [user]);
 
+  useEffect(() => {
+    setSelectedBriefIds((prev) =>
+      prev.filter((id) => briefs.some((brief) => brief.id === id)),
+    );
+  }, [briefs]);
+
   const handleSummarize = async () => {
     if (!draftEmail.trim() || !user) {
       return;
@@ -147,6 +170,7 @@ export default function BriefsScreen() {
         ...prev,
       ]);
       setDraftEmail('');
+      setFollowUpVisible(true);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       const nextMessage = getSupabaseErrorMessage(
@@ -203,6 +227,98 @@ export default function BriefsScreen() {
     }
   };
 
+  const toggleSelectionMode = () => {
+    setSelectionMode((prev) => {
+      if (prev) {
+        setSelectedBriefIds([]);
+      }
+
+      return !prev;
+    });
+  };
+
+  const handleToggleBriefSelection = (briefId: string) => {
+    void Haptics.selectionAsync();
+    setSelectedBriefIds((prev) =>
+      prev.includes(briefId)
+        ? prev.filter((id) => id !== briefId)
+        : [...prev, briefId],
+    );
+  };
+
+  const performDeleteSelected = async () => {
+    if (!user || selectedBriefIds.length === 0) {
+      return;
+    }
+
+    setDeleting(true);
+    setErrorMessage('');
+
+    try {
+      const { error } = await deleteBriefsByIds(user.id, selectedBriefIds);
+
+      if (error) {
+        throw error;
+      }
+
+      const feed = await fetchBriefFeed(user.id);
+      applyBriefFeed(feed);
+      setSelectedBriefIds([]);
+      setSelectionMode(false);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setErrorMessage(getSupabaseErrorMessage(error, 'Failed to delete briefs'));
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const handleDeleteSelected = () => {
+    if (selectedBriefIds.length === 0) {
+      return;
+    }
+
+    const title =
+      selectedBriefIds.length === 1 ? 'Delete brief?' : 'Delete selected briefs?';
+    const message =
+      selectedBriefIds.length === 1
+        ? 'This will remove the brief and any tasks created from it.'
+        : `This will remove ${selectedBriefIds.length} briefs and any tasks created from them.`;
+
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm(message)) {
+        void performDeleteSelected();
+      }
+      return;
+    }
+
+    Alert.alert(title, message, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => void performDeleteSelected(),
+      },
+    ]);
+  };
+
+  const selectedBriefCount = selectedBriefIds.length;
+
+  const handleSaveFollowUp = async (responses: UserAiContextResponse[]) => {
+    try {
+      setSavingFollowUp(true);
+      await updateAiContext(buildUserAiContext(profile?.user_type, responses));
+      setFollowUpVisible(false);
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setErrorMessage(
+        getSupabaseErrorMessage(error, 'Failed to save your AI context'),
+      );
+    } finally {
+      setSavingFollowUp(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView
@@ -239,10 +355,64 @@ export default function BriefsScreen() {
         />
 
         <View style={styles.listHeader}>
-          <Text style={styles.listTitle}>Recent Briefs</Text>
-          <Text style={styles.listMeta}>
-            {loading ? 'Loading...' : `${briefs.length} saved`}
-          </Text>
+          <View style={styles.listHeaderCopy}>
+            <Text style={styles.listTitle}>
+              {selectionMode ? 'Select Briefs' : 'Recent Briefs'}
+            </Text>
+            <Text style={styles.listMeta}>
+              {selectionMode
+                ? `${selectedBriefCount} selected`
+                : loading
+                  ? 'Loading...'
+                  : `${briefs.length} saved`}
+            </Text>
+          </View>
+
+          {briefs.length > 0 ? (
+            <View style={styles.headerActions}>
+              {selectionMode ? (
+                <>
+                  <TouchableOpacity
+                    style={styles.headerSecondaryButton}
+                    onPress={toggleSelectionMode}
+                    activeOpacity={0.85}
+                    disabled={deleting}
+                  >
+                    <Text style={styles.headerSecondaryButtonText}>Cancel</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    style={[
+                      styles.headerDeleteButton,
+                      (selectedBriefCount === 0 || deleting) &&
+                        styles.headerDeleteButtonDisabled,
+                    ]}
+                    onPress={handleDeleteSelected}
+                    activeOpacity={0.85}
+                    disabled={selectedBriefCount === 0 || deleting}
+                  >
+                    {deleting ? (
+                      <ActivityIndicator size="small" color="#F7F3EA" />
+                    ) : (
+                      <Text style={styles.headerDeleteButtonText}>
+                        {selectedBriefCount > 0
+                          ? `Delete (${selectedBriefCount})`
+                          : 'Delete'}
+                      </Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity
+                  style={styles.headerSelectButton}
+                  onPress={toggleSelectionMode}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.headerSelectButtonText}>Select</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          ) : null}
         </View>
 
         {loading ? (
@@ -268,10 +438,24 @@ export default function BriefsScreen() {
               index={index}
               submittingId={submittingId}
               onAddToTasks={handleAddToTasks}
+              selectionMode={selectionMode}
+              selected={selectedBriefIds.includes(brief.id)}
+              deleting={deleting}
+              onToggleSelect={handleToggleBriefSelection}
             />
           ))
         )}
       </ScrollView>
+
+      <BriefFollowUpSheet
+        visible={followUpVisible}
+        questions={followUpQuestions}
+        initialContext={existingAiContext}
+        firstName={profile?.first_name}
+        saving={savingFollowUp}
+        onClose={() => setFollowUpVisible(false)}
+        onSave={handleSaveFollowUp}
+      />
     </SafeAreaView>
   );
 }
@@ -288,8 +472,13 @@ const styles = StyleSheet.create({
   listHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-end',
+    alignItems: 'center',
     marginTop: 4,
+    gap: 12,
+  },
+  listHeaderCopy: {
+    flex: 1,
+    gap: 4,
   },
   listTitle: {
     color: '#102D24',
@@ -300,6 +489,56 @@ const styles = StyleSheet.create({
     color: '#5A6A63',
     fontSize: 13,
     fontWeight: '600',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerSelectButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    backgroundColor: '#E8E0D2',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerSelectButtonText: {
+    color: '#0F4737',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  headerSecondaryButton: {
+    minHeight: 38,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: '#CBBEAA',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FBF8F2',
+  },
+  headerSecondaryButtonText: {
+    color: '#5A6A63',
+    fontSize: 13,
+    fontWeight: '700',
+  },
+  headerDeleteButton: {
+    minHeight: 38,
+    minWidth: 94,
+    borderRadius: 999,
+    backgroundColor: '#A53F31',
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerDeleteButtonDisabled: {
+    backgroundColor: '#C89288',
+  },
+  headerDeleteButtonText: {
+    color: '#F7F3EA',
+    fontSize: 13,
+    fontWeight: '800',
   },
   emptyCard: {
     backgroundColor: '#FBF8F2',

@@ -9,6 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import { FunctionsHttpError } from '@supabase/supabase-js';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { ArrowRight, Sparkles } from 'lucide-react-native';
@@ -17,7 +18,8 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
-import { supabase } from '@/lib/supabase';
+import { getPasswordResetRedirectUrl } from '@/lib/auth';
+import { getSupabaseErrorMessage, supabase } from '@/lib/supabase';
 import { UserType } from '@/types/database';
 
 const DISPLAY_FONT = Platform.select({
@@ -30,7 +32,9 @@ export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [error, setError] = useState('');
+  const [notice, setNotice] = useState('');
   const { signIn, session, loading: authLoading } = useAuth();
   const router = useRouter();
   const params = useLocalSearchParams<{
@@ -52,17 +56,41 @@ export default function LoginScreen() {
     return <Redirect href="/" />;
   }
 
+  const getResetRequestErrorMessage = async (error: unknown) => {
+    if (error instanceof FunctionsHttpError) {
+      const response = error.context as Response | undefined;
+
+      if (response) {
+        try {
+          const payload = (await response.json()) as { error?: string };
+
+          if (payload?.error) {
+            return payload.error;
+          }
+        } catch {
+          // Ignore parse errors and fall through to the generic formatter.
+        }
+      }
+    }
+
+    return getSupabaseErrorMessage(error, 'Failed to send reset link');
+  };
+
   const handleLogin = async () => {
-    if (!email || !password) {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail || !password) {
       setError('Please fill in all fields');
+      setNotice('');
       return;
     }
 
     setLoading(true);
     setError('');
+    setNotice('');
 
     try {
-      await signIn(email, password);
+      await signIn(trimmedEmail, password);
       if (!isNewUserEntry) {
         router.replace('/');
         return;
@@ -104,6 +132,44 @@ export default function LoginScreen() {
       setError(err.message || 'Failed to sign in');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    const trimmedEmail = email.trim();
+
+    if (!trimmedEmail) {
+      setError('Enter your email first to receive a reset link');
+      setNotice('');
+      return;
+    }
+
+    setResetLoading(true);
+    setError('');
+    setNotice('');
+
+    try {
+      const { error: resetError } = await supabase.functions.invoke(
+        'request-password-reset',
+        {
+          body: {
+            email: trimmedEmail,
+            redirectTo: getPasswordResetRedirectUrl(),
+          },
+        },
+      );
+
+      if (resetError) {
+        throw resetError;
+      }
+
+      setNotice(
+        'Password reset link sent. Check your email and open the link on this device.',
+      );
+    } catch (err: unknown) {
+      setError(await getResetRequestErrorMessage(err));
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -151,6 +217,12 @@ export default function LoginScreen() {
             </View>
           ) : null}
 
+          {notice ? (
+            <View style={styles.noticeBanner}>
+              <Text style={styles.noticeText}>{notice}</Text>
+            </View>
+          ) : null}
+
           <View style={styles.fieldGroup}>
             <Text style={styles.label}>Email</Text>
             <TextInput
@@ -166,7 +238,18 @@ export default function LoginScreen() {
           </View>
 
           <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Password</Text>
+            <View style={styles.passwordLabelRow}>
+              <Text style={styles.label}>Password</Text>
+              <TouchableOpacity
+                onPress={() => void handleForgotPassword()}
+                activeOpacity={0.75}
+                disabled={loading || resetLoading}
+              >
+                <Text style={styles.forgotLink}>
+                  {resetLoading ? 'Sending...' : 'Forgot password?'}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <TextInput
               style={styles.input}
               value={password}
@@ -303,14 +386,35 @@ const styles = StyleSheet.create({
     fontSize: 13,
     lineHeight: 18,
   },
+  noticeBanner: {
+    backgroundColor: '#E4F2EB',
+    borderRadius: 14,
+    padding: 12,
+  },
+  noticeText: {
+    color: '#155240',
+    fontSize: 13,
+    lineHeight: 18,
+  },
   fieldGroup: {
     gap: 8,
+  },
+  passwordLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   label: {
     color: '#163D32',
     fontSize: 13,
     fontWeight: '700',
     letterSpacing: 0.4,
+  },
+  forgotLink: {
+    color: '#0F4737',
+    fontSize: 13,
+    fontWeight: '800',
   },
   input: {
     backgroundColor: '#F2ECE1',

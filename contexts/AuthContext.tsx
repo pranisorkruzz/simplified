@@ -1,6 +1,7 @@
 import React, { createContext, useState, useEffect, useContext } from 'react';
 import { Session, User } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
+import { UserAiContext } from '@/lib/ai-context';
 import { Profile } from '@/types/database';
 
 interface AuthContextType {
@@ -20,6 +21,7 @@ interface AuthContextType {
     last_name?: string;
     avatar_url?: string;
   }) => Promise<void>;
+  updateAiContext: (context: UserAiContext) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -121,6 +123,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setProfile(data);
   };
 
+  const updateAiContext = async (context: UserAiContext) => {
+    if (!user) throw new Error('No user logged in');
+
+    const { data, error } = await supabase.auth.updateUser({
+      data: {
+        ...(user.user_metadata ?? {}),
+        ai_context: context,
+      },
+    });
+
+    if (error) throw error;
+
+    if (data.user) {
+      setUser(data.user);
+      setSession((prev) => (prev ? { ...prev, user: data.user } : prev));
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -132,6 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signUp,
         signOut,
         updateProfile,
+        updateAiContext,
       }}
     >
       {children}

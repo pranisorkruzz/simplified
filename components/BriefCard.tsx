@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import {
   ArrowRight,
+  Check,
   CheckCheck,
   Clock3,
   Plus,
@@ -33,15 +34,24 @@ export default function BriefCardItem({
   index,
   submittingId,
   onAddToTasks,
+  selectionMode,
+  selected,
+  deleting,
+  onToggleSelect,
 }: {
   brief: BriefCardData;
   index: number;
   submittingId: string | null;
   onAddToTasks: (brief: BriefCardData) => Promise<void>;
+  selectionMode: boolean;
+  selected: boolean;
+  deleting: boolean;
+  onToggleSelect: (briefId: string) => void;
 }) {
   const entrance = useRef(new Animated.Value(0)).current;
   const priorityColors = getPriorityColors(brief.priority);
   const isBusy = submittingId === brief.id;
+  const addDisabled = brief.addedToTasks || isBusy || selectionMode || deleting;
 
   useEffect(() => {
     Animated.timing(entrance, {
@@ -57,6 +67,7 @@ export default function BriefCardItem({
     <Animated.View
       style={[
         styles.briefCard,
+        selected && styles.briefCardSelected,
         {
           opacity: entrance,
           transform: [
@@ -76,74 +87,94 @@ export default function BriefCardItem({
         },
       ]}
     >
-      <View style={styles.briefMetaRow}>
-        <View style={styles.metaStack}>
-          <View style={styles.timePill}>
-            <Clock3 size={14} color="#0F4737" />
-            <Text style={styles.timePillText}>
-              {formatCreatedTimeLabel(brief.createdAt)}
-            </Text>
-          </View>
-          {brief.deadlineAt ? (
-            <View style={styles.deadlinePill}>
-              <Text style={styles.deadlinePillText}>
-                {formatTimeLeft(brief.deadlineAt)}
+      <TouchableOpacity
+        activeOpacity={selectionMode ? 0.92 : 1}
+        disabled={!selectionMode}
+        onPress={() => onToggleSelect(brief.id)}
+      >
+        <View style={styles.briefMetaRow}>
+          <View style={styles.metaStack}>
+            <View style={styles.timePill}>
+              <Clock3 size={14} color="#0F4737" />
+              <Text style={styles.timePillText}>
+                {formatCreatedTimeLabel(brief.createdAt)}
               </Text>
             </View>
-          ) : null}
-        </View>
-        <View
-          style={[
-            styles.priorityPill,
-            { backgroundColor: priorityColors.background },
-          ]}
-        >
-          <Text
-            style={[styles.priorityPillText, { color: priorityColors.text }]}
-          >
-            {brief.priority.toUpperCase()}
-          </Text>
-        </View>
-      </View>
-
-      <Text style={styles.briefTitle}>{brief.title}</Text>
-      <Text style={styles.briefSummary}>{brief.summary}</Text>
-
-      <View style={styles.actionsBlock}>
-        {brief.actionItems.map((item) => (
-          <View key={`${brief.id}-${item}`} style={styles.actionRow}>
-            <View style={styles.actionDot} />
-            <Text style={styles.actionText}>{item}</Text>
+            {brief.deadlineAt ? (
+              <View style={styles.deadlinePill}>
+                <Text style={styles.deadlinePillText}>
+                  {formatTimeLeft(brief.deadlineAt)}
+                </Text>
+              </View>
+            ) : null}
           </View>
-        ))}
-      </View>
+          <View style={styles.headerRight}>
+            {selectionMode ? (
+              <View
+                style={[
+                  styles.selectionBadge,
+                  selected && styles.selectionBadgeSelected,
+                ]}
+              >
+                {selected ? <Check size={14} color="#F7F3EA" strokeWidth={3} /> : null}
+              </View>
+            ) : null}
+            <View
+              style={[
+                styles.priorityPill,
+                { backgroundColor: priorityColors.background },
+              ]}
+            >
+              <Text
+                style={[styles.priorityPillText, { color: priorityColors.text }]}
+              >
+                {brief.priority.toUpperCase()}
+              </Text>
+            </View>
+          </View>
+        </View>
 
-      <TouchableOpacity
-        style={[
-          styles.addTaskButton,
-          (brief.addedToTasks || isBusy) && styles.addTaskButtonDisabled,
-        ]}
-        disabled={brief.addedToTasks || isBusy}
-        onPress={() => void onAddToTasks(brief)}
-      >
-        {isBusy ? (
-          <ActivityIndicator size="small" color="#F7F3EA" />
-        ) : brief.addedToTasks ? (
-          <>
-            <CheckCheck size={16} color="#F7F3EA" />
-            <Text style={styles.addTaskButtonText}>
-              Added {brief.actionItems.length} Tasks
-            </Text>
-          </>
-        ) : (
-          <>
-            <Plus size={16} color="#F7F3EA" />
-            <Text style={styles.addTaskButtonText}>
-              Add {brief.actionItems.length} Small Tasks
-            </Text>
-            <ArrowRight size={16} color="#F7F3EA" />
-          </>
-        )}
+        <Text style={styles.briefTitle}>{brief.title}</Text>
+        <Text style={styles.briefSummary}>{brief.summary}</Text>
+
+        <View style={styles.actionsBlock}>
+          {brief.actionItems.map((item) => (
+            <View key={`${brief.id}-${item}`} style={styles.actionRow}>
+              <View style={styles.actionDot} />
+              <Text style={styles.actionText}>{item}</Text>
+            </View>
+          ))}
+        </View>
+
+        <TouchableOpacity
+          style={[
+            styles.addTaskButton,
+            addDisabled && styles.addTaskButtonDisabled,
+          ]}
+          disabled={addDisabled}
+          onPress={() => void onAddToTasks(brief)}
+        >
+          {isBusy ? (
+            <ActivityIndicator size="small" color="#F7F3EA" />
+          ) : brief.addedToTasks ? (
+            <>
+              <CheckCheck size={16} color="#F7F3EA" />
+              <Text style={styles.addTaskButtonText}>
+                Added {brief.actionItems.length} Tasks
+              </Text>
+            </>
+          ) : selectionMode ? (
+            <Text style={styles.addTaskButtonText}>Tap to select this brief</Text>
+          ) : (
+            <>
+              <Plus size={16} color="#F7F3EA" />
+              <Text style={styles.addTaskButtonText}>
+                Add {brief.actionItems.length} Small Tasks
+              </Text>
+              <ArrowRight size={16} color="#F7F3EA" />
+            </>
+          )}
+        </TouchableOpacity>
       </TouchableOpacity>
     </Animated.View>
   );
@@ -161,6 +192,10 @@ const styles = StyleSheet.create({
     elevation: 6,
     marginTop: 2,
   },
+  briefCardSelected: {
+    borderWidth: 2,
+    borderColor: '#0F4737',
+  },
   briefMetaRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -173,6 +208,11 @@ const styles = StyleSheet.create({
     gap: 8,
     flexWrap: 'wrap',
     flex: 1,
+  },
+  headerRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
   timePill: {
     flexDirection: 'row',
@@ -208,6 +248,20 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: '800',
     letterSpacing: 0.9,
+  },
+  selectionBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: '#A9B7B1',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FBF8F2',
+  },
+  selectionBadgeSelected: {
+    backgroundColor: '#0F4737',
+    borderColor: '#0F4737',
   },
   briefTitle: {
     color: '#102D24',
@@ -256,6 +310,7 @@ const styles = StyleSheet.create({
   },
   addTaskButtonDisabled: {
     backgroundColor: '#6E847C',
+    opacity: 0.92,
   },
   addTaskButtonText: {
     color: '#F7F3EA',

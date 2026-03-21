@@ -44,14 +44,13 @@ export default function PersonalInfoScreen() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    if (profile && firstName === '' && lastName === '') {
-      setFirstName(profile.first_name || '');
-      setLastName(profile.last_name || '');
-    }
-    if (user && email === '') {
-      setEmail(user.email || '');
-    }
-  }, [profile, user]);
+    setFirstName(profile?.first_name || '');
+    setLastName(profile?.last_name || '');
+  }, [profile?.first_name, profile?.last_name]);
+
+  useEffect(() => {
+    setEmail(user?.email || '');
+  }, [user?.email]);
 
   const handleSave = async () => {
     setSaving(true);

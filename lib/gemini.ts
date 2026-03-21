@@ -5,6 +5,10 @@ import {
   parseEmailBrief,
 } from '@/lib/briefs';
 import {
+  buildAiContextPrompt,
+  readUserAiContextFromMetadata,
+} from '@/lib/ai-context';
+import {
   getSupabaseErrorMessage,
   isMissingColumnError,
   supabase,
@@ -49,15 +53,21 @@ function isFunctionUnavailableError(error: unknown) {
   }
 
   const maybeError = error as SupabaseFunctionErrorLike;
+  const status = maybeError.context?.status;
   const message = [maybeError.message, maybeError.details, maybeError.hint]
     .filter((value): value is string => Boolean(value))
     .join(' ')
     .toLowerCase();
 
   return (
-    maybeError.context?.status === 404 ||
+    status === 401 ||
+    status === 404 ||
+    (typeof status === 'number' && status >= 500) ||
     message.includes('404') ||
+    message.includes('401') ||
     message.includes('not found') ||
+    message.includes('unauthorized') ||
+    message.includes('edge function returned a non-2xx status code') ||
     message.includes('failed to send a request to the edge function')
   );
 }
@@ -65,6 +75,12 @@ function isFunctionUnavailableError(error: unknown) {
 async function requestGeminiFromClient(emailText: string): Promise<EmailBrief> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
   const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.0-flash';
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  const userContextPrompt = buildAiContextPrompt(
+    readUserAiContextFromMetadata(user?.user_metadata),
+  );
 
   if (!apiKey) {
     return buildFallbackBrief(emailText);
@@ -96,6 +112,7 @@ Rules:
 - Start each action item with a verb.
 - Do not wrap the JSON in markdown fences.
 - Extract the most important next action, not every possible task.
+${userContextPrompt}
 
 Email:
 ${emailText}`;
