@@ -519,9 +519,9 @@ const styles = StyleSheet.create({
   headerTitle: {
     color: '#102D24',
     fontFamily: DISPLAY_FONT,
-    fontSize: 24,
+    fontSize: 20,
     marginTop: 2,
-    lineHeight: 30,
+    lineHeight: 26,
   },
   progressPill: {
     backgroundColor: '#DDEFEA',

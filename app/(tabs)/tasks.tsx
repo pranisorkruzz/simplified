@@ -16,7 +16,6 @@ import {
 import * as Haptics from 'expo-haptics';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  CheckCheck,
   Sparkles,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -229,8 +228,7 @@ export default function TasksScreen() {
     }
   };
 
-  const activeTasks = tasks.filter((task) => !task.completed);
-  const finishedTasks = tasks.filter((task) => task.completed);
+   const activeTasks = tasks.filter((task) => !task.completed);
   const activeTaskGroups = Array.from(
     activeTasks.reduce((groups, task) => {
       const groupId = task.chat_id ?? UNGROUPED_ACTIVE_FILTER;
@@ -424,32 +422,7 @@ export default function TasksScreen() {
               ))
             )}
 
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Finished</Text>
-              <View style={styles.sectionBadge}>
-                <CheckCheck size={14} color="#0F4737" />
-                <Text style={styles.sectionBadgeText}>{finishedTasks.length}</Text>
-              </View>
-            </View>
 
-            {finishedTasks.length === 0 ? (
-              <View style={styles.emptyArchiveCard}>
-                <Text style={styles.emptyTitle}>Nothing archived yet</Text>
-                <Text style={styles.emptyCopy}>
-                  Finished work lands here automatically when a task is done.
-                </Text>
-              </View>
-            ) : (
-              finishedTasks.map((task, index) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  index={index}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                />
-              ))
-            )}
           </>
         )}
       </ScrollView>
@@ -548,14 +521,6 @@ const styles = StyleSheet.create({
   },
   emptyCard: {
     backgroundColor: '#FBF8F2',
-    borderRadius: 26,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  emptyArchiveCard: {
-    backgroundColor: '#EFE7DA',
     borderRadius: 26,
     padding: 24,
     alignItems: 'center',
