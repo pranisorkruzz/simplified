@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import * as Haptics from 'expo-haptics';
@@ -413,144 +416,155 @@ export default function BriefsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView
-        contentContainerStyle={[
-          styles.scrollContent,
-          {
-            paddingTop:
-              10 + Math.max(insets.top, Platform.OS === 'android' ? 10 : 0),
-            paddingBottom: 112 + Math.max(insets.bottom, 12),
-          },
-        ]}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => void loadBriefs('refresh')}
-            tintColor="#0F4737"
-            colors={['#0F4737']}
-          />
-        }
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={{ flex: 1 }}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
       >
-        <BriefsHero
-          briefsCount={briefs.length}
-          activeTasksCount={taskStats.active}
-          finishedTasksCount={taskStats.finished}
-        />
+        <ScrollView
+          contentContainerStyle={[
+            styles.scrollContent,
+            {
+              paddingTop:
+                10 + Math.max(insets.top, Platform.OS === 'android' ? 10 : 0),
+              paddingBottom: 112 + Math.max(insets.bottom, 12),
+            },
+          ]}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={() => void loadBriefs('refresh')}
+              tintColor="#0F4737"
+              colors={['#0F4737']}
+            />
+          }
+        >
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View>
+              <BriefsHero
+                briefsCount={briefs.length}
+                activeTasksCount={taskStats.active}
+                finishedTasksCount={taskStats.finished}
+              />
 
-        <BriefComposer
-          draftEmail={draftEmail}
-          setDraftEmail={setDraftEmail}
-          errorMessage={errorMessage}
-          submitting={submitting}
-          onSummarize={handleSummarize}
-        />
+              <BriefComposer
+                draftEmail={draftEmail}
+                setDraftEmail={setDraftEmail}
+                errorMessage={errorMessage}
+                submitting={submitting}
+                onSummarize={handleSummarize}
+              />
 
-        <View style={styles.listHeader}>
-          <View style={styles.listHeaderCopy}>
-            <Text style={styles.listTitle}>
-              {selectionMode ? 'Select Briefs' : 'Recent Briefs'}
-            </Text>
-            <Text style={styles.listMeta}>
-              {selectionMode
-                ? `${selectedBriefCount} selected`
-                : loading
-                  ? 'Loading...'
-                  : `${briefs.length} saved`}
-            </Text>
-          </View>
+              <View style={styles.listHeader}>
+                <View style={styles.listHeaderCopy}>
+                  <Text style={styles.listTitle}>
+                    {selectionMode ? 'Select Briefs' : 'Recent Briefs'}
+                  </Text>
+                  <Text style={styles.listMeta}>
+                    {selectionMode
+                      ? `${selectedBriefCount} selected`
+                      : loading
+                        ? 'Loading...'
+                        : `${briefs.length} saved`}
+                  </Text>
+                </View>
 
-          {briefs.length > 0 ? (
-            <View style={styles.headerActions}>
-              {selectionMode ? (
-                <>
-                  <TouchableOpacity
-                    style={styles.headerSecondaryButton}
-                    onPress={handleSelectAll}
-                    activeOpacity={0.85}
-                    disabled={deleting}
-                  >
-                    <Text style={styles.headerSecondaryButtonText}>
-                      {selectedBriefIds.length === briefs.length
-                        ? 'Deselect All'
-                        : 'Select All'}
-                    </Text>
-                  </TouchableOpacity>
+                {briefs.length > 0 ? (
+                  <View style={styles.headerActions}>
+                    {selectionMode ? (
+                      <>
+                        <TouchableOpacity
+                          style={styles.headerSecondaryButton}
+                          onPress={handleSelectAll}
+                          activeOpacity={0.85}
+                          disabled={deleting}
+                        >
+                          <Text style={styles.headerSecondaryButtonText}>
+                            {selectedBriefIds.length === briefs.length
+                              ? 'Deselect All'
+                              : 'Select All'}
+                          </Text>
+                        </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={styles.headerSecondaryButton}
-                    onPress={toggleSelectionMode}
-                    activeOpacity={0.85}
-                    disabled={deleting}
-                  >
-                    <Text style={styles.headerSecondaryButtonText}>Cancel</Text>
-                  </TouchableOpacity>
+                        <TouchableOpacity
+                          style={styles.headerSecondaryButton}
+                          onPress={toggleSelectionMode}
+                          activeOpacity={0.85}
+                          disabled={deleting}
+                        >
+                          <Text style={styles.headerSecondaryButtonText}>Cancel</Text>
+                        </TouchableOpacity>
 
-                  <TouchableOpacity
-                    style={[
-                      styles.headerDeleteButton,
-                      (selectedBriefCount === 0 || deleting) &&
-                        styles.headerDeleteButtonDisabled,
-                    ]}
-                    onPress={handleDeleteSelected}
-                    activeOpacity={0.85}
-                    disabled={selectedBriefCount === 0 || deleting}
-                  >
-                    {deleting ? (
-                      <ActivityIndicator size="small" color="#F7F3EA" />
+                        <TouchableOpacity
+                          style={[
+                            styles.headerDeleteButton,
+                            (selectedBriefCount === 0 || deleting) &&
+                              styles.headerDeleteButtonDisabled,
+                          ]}
+                          onPress={handleDeleteSelected}
+                          activeOpacity={0.85}
+                          disabled={selectedBriefCount === 0 || deleting}
+                        >
+                          {deleting ? (
+                            <ActivityIndicator size="small" color="#F7F3EA" />
+                          ) : (
+                            <Text style={styles.headerDeleteButtonText}>
+                              {selectedBriefCount > 0
+                                ? `Delete (${selectedBriefCount})`
+                                : 'Delete'}
+                            </Text>
+                          )}
+                        </TouchableOpacity>
+                      </>
                     ) : (
-                      <Text style={styles.headerDeleteButtonText}>
-                        {selectedBriefCount > 0
-                          ? `Delete (${selectedBriefCount})`
-                          : 'Delete'}
-                      </Text>
+                      <TouchableOpacity
+                        style={styles.headerSelectButton}
+                        onPress={toggleSelectionMode}
+                        activeOpacity={0.85}
+                      >
+                        <Text style={styles.headerSelectButtonText}>Select</Text>
+                      </TouchableOpacity>
                     )}
-                  </TouchableOpacity>
-                </>
+                  </View>
+                ) : null}
+              </View>
+
+              {loading ? (
+                <View style={styles.emptyCard}>
+                  <ActivityIndicator size="small" color="#0F4737" />
+                  <Text style={styles.emptyTitle}>Loading your saved briefs</Text>
+                </View>
+              ) : briefs.length === 0 ? (
+                <View style={styles.emptyCard}>
+                  <Text style={styles.emptyEyebrow}>NO BRIEFS YET</Text>
+                  <Text style={styles.emptyTitle}>
+                    Start with one important email
+                  </Text>
+                  <Text style={styles.emptyCopy}>
+                    The first summary card will appear here, ready to drop into Tasks.
+                  </Text>
+                </View>
               ) : (
-                <TouchableOpacity
-                  style={styles.headerSelectButton}
-                  onPress={toggleSelectionMode}
-                  activeOpacity={0.85}
-                >
-                  <Text style={styles.headerSelectButtonText}>Select</Text>
-                </TouchableOpacity>
+                briefs.map((brief, index) => (
+                  <BriefCardItem
+                    key={brief.id}
+                    brief={brief}
+                    index={index}
+                    submittingId={submittingId}
+                    onAddToTasks={handleAddToTasks}
+                    selectionMode={selectionMode}
+                    selected={selectedBriefIds.includes(brief.id)}
+                    deleting={deleting}
+                    onToggleSelect={handleToggleBriefSelection}
+                  />
+                ))
               )}
             </View>
-          ) : null}
-        </View>
-
-        {loading ? (
-          <View style={styles.emptyCard}>
-            <ActivityIndicator size="small" color="#0F4737" />
-            <Text style={styles.emptyTitle}>Loading your saved briefs</Text>
-          </View>
-        ) : briefs.length === 0 ? (
-          <View style={styles.emptyCard}>
-            <Text style={styles.emptyEyebrow}>NO BRIEFS YET</Text>
-            <Text style={styles.emptyTitle}>
-              Start with one important email
-            </Text>
-            <Text style={styles.emptyCopy}>
-              The first summary card will appear here, ready to drop into Tasks.
-            </Text>
-          </View>
-        ) : (
-          briefs.map((brief, index) => (
-            <BriefCardItem
-              key={brief.id}
-              brief={brief}
-              index={index}
-              submittingId={submittingId}
-              onAddToTasks={handleAddToTasks}
-              selectionMode={selectionMode}
-              selected={selectedBriefIds.includes(brief.id)}
-              deleting={deleting}
-              onToggleSelect={handleToggleBriefSelection}
-            />
-          ))
-        )}
-      </ScrollView>
+          </TouchableWithoutFeedback>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <BriefFollowUpSheet
         visible={followUpVisible}

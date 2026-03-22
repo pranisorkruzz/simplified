@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -28,6 +30,7 @@ const DISPLAY_FONT = Platform.select({
 });
 
 export default function ResetPasswordScreen() {
+  const confirmPasswordRef = useRef<TextInput>(null);
   const { session } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -170,111 +173,121 @@ export default function ResetPasswordScreen() {
           },
         ]}
       >
-        <LinearGradient
-          colors={['#103B31', '#1C6A57', '#D7B989']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-          <View style={styles.heroIcon}>
-            <ShieldCheck size={22} color="#103B31" />
-          </View>
-          <Text style={styles.eyebrow}>SECURE RECOVERY</Text>
-          <Text style={styles.heroTitle}>Choose a new password</Text>
-          <Text style={styles.heroSubtitle}>
-            Finish recovery here and get back into your briefs, tasks, and
-            profile without creating a new account.
-          </Text>
-        </LinearGradient>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ flex: 1, justifyContent: 'center', gap: 18 }}>
+            <LinearGradient
+              colors={['#103B31', '#1C6A57', '#D7B989']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
+            >
+              <View style={styles.heroIcon}>
+                <ShieldCheck size={22} color="#103B31" />
+              </View>
+              <Text style={styles.eyebrow}>SECURE RECOVERY</Text>
+              <Text style={styles.heroTitle}>Choose a new password</Text>
+              <Text style={styles.heroSubtitle}>
+                Finish recovery here and get back into your briefs, tasks, and
+                profile without creating a new account.
+              </Text>
+            </LinearGradient>
 
-        <View style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionPill}>
-              <KeyRound size={14} color="#103B31" />
-              <Text style={styles.sectionPillText}>Password Reset</Text>
-            </View>
-            <Text style={styles.sectionTitle}>Update Password</Text>
-          </View>
-
-          {error ? (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          {success ? (
-            <View style={styles.noticeBanner}>
-              <Text style={styles.noticeText}>{success}</Text>
-            </View>
-          ) : null}
-
-          {initializing ? (
-            <View style={styles.loadingWrap}>
-              <ActivityIndicator size="small" color="#103B31" />
-              <Text style={styles.loadingText}>Validating reset link</Text>
-            </View>
-          ) : recoveryReady ? (
-            <>
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>New Password</Text>
-                <TextInput
-                  style={styles.input}
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="Enter a new password"
-                  placeholderTextColor="#7B8A83"
-                  secureTextEntry
-                  autoComplete="password-new"
-                />
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionPill}>
+                  <KeyRound size={14} color="#103B31" />
+                  <Text style={styles.sectionPillText}>Password Reset</Text>
+                </View>
+                <Text style={styles.sectionTitle}>Update Password</Text>
               </View>
 
-              <View style={styles.fieldGroup}>
-                <Text style={styles.label}>Confirm Password</Text>
-                <TextInput
-                  style={styles.input}
-                  value={confirmPassword}
-                  onChangeText={setConfirmPassword}
-                  placeholder="Confirm your new password"
-                  placeholderTextColor="#7B8A83"
-                  secureTextEntry
-                  autoComplete="password-new"
-                />
-              </View>
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              {success ? (
+                <View style={styles.noticeBanner}>
+                  <Text style={styles.noticeText}>{success}</Text>
+                </View>
+              ) : null}
+
+              {initializing ? (
+                <View style={styles.loadingWrap}>
+                  <ActivityIndicator size="small" color="#103B31" />
+                  <Text style={styles.loadingText}>Validating reset link</Text>
+                </View>
+              ) : recoveryReady ? (
+                <>
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>New Password</Text>
+                    <TextInput
+                      style={styles.input}
+                      value={password}
+                      onChangeText={setPassword}
+                      placeholder="Enter a new password"
+                      placeholderTextColor="#7B8A83"
+                      secureTextEntry
+                      autoComplete="password-new"
+                      returnKeyType="next"
+                      onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+                      blurOnSubmit={false}
+                    />
+                  </View>
+
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.label}>Confirm Password</Text>
+                    <TextInput
+                      ref={confirmPasswordRef}
+                      style={styles.input}
+                      value={confirmPassword}
+                      onChangeText={setConfirmPassword}
+                      placeholder="Confirm your new password"
+                      placeholderTextColor="#7B8A83"
+                      secureTextEntry
+                      autoComplete="password-new"
+                      returnKeyType="done"
+                      onSubmitEditing={handleUpdatePassword}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    style={styles.buttonWrap}
+                    onPress={() => void handleUpdatePassword()}
+                    disabled={submitting}
+                  >
+                    <LinearGradient
+                      colors={['#0F4737', '#216B56']}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 0 }}
+                      style={styles.button}
+                    >
+                      {submitting ? (
+                        <ActivityIndicator size="small" color="#F7F3EA" />
+                      ) : (
+                        <>
+                          <Text style={styles.buttonText}>Save New Password</Text>
+                          <ArrowRight size={16} color="#F7F3EA" />
+                        </>
+                      )}
+                    </LinearGradient>
+                  </TouchableOpacity>
+                </>
+              ) : null}
 
               <TouchableOpacity
-                style={styles.buttonWrap}
-                onPress={() => void handleUpdatePassword()}
-                disabled={submitting}
+                style={styles.secondaryButton}
+                onPress={() => router.replace('/login')}
+                activeOpacity={0.8}
               >
-                <LinearGradient
-                  colors={['#0F4737', '#216B56']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={styles.button}
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="#F7F3EA" />
-                  ) : (
-                    <>
-                      <Text style={styles.buttonText}>Save New Password</Text>
-                      <ArrowRight size={16} color="#F7F3EA" />
-                    </>
-                  )}
-                </LinearGradient>
+                <Text style={styles.secondaryButtonText}>
+                  {success ? 'Back to sign in' : 'Return to sign in'}
+                </Text>
               </TouchableOpacity>
-            </>
-          ) : null}
-
-          <TouchableOpacity
-            style={styles.secondaryButton}
-            onPress={() => router.replace('/login')}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.secondaryButtonText}>
-              {success ? 'Back to sign in' : 'Return to sign in'}
-            </Text>
-          </TouchableOpacity>
-        </View>
+            </View>
+          </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

@@ -9,8 +9,10 @@ import {
   TouchableOpacity,
   View,
   Alert,
+  Keyboard,
+  TouchableWithoutFeedback,
 } from 'react-native';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -37,6 +39,7 @@ export default function PersonalInfoScreen() {
   const { user, profile, updateProfile } = useAuth();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const lastNameRef = useRef<TextInput>(null);
   
   const [firstName, setFirstName] = useState(profile?.first_name || '');
   const [lastName, setLastName] = useState(profile?.last_name || '');
@@ -100,99 +103,110 @@ export default function PersonalInfoScreen() {
             { paddingBottom: insets.bottom + 20 },
           ]}
           showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.avatarSection}>
-            <View style={styles.avatarOuter}>
-              <View style={styles.avatarInner}>
-                <Text style={styles.avatarInitial}>
-                  {firstName?.charAt(0) || email?.charAt(0).toUpperCase() || 'U'}
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+            <View>
+              <View style={styles.avatarSection}>
+                <View style={styles.avatarOuter}>
+                  <View style={styles.avatarInner}>
+                    <Text style={styles.avatarInitial}>
+                      {firstName?.charAt(0) || email?.charAt(0).toUpperCase() || 'U'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity style={styles.editAvatarButton} activeOpacity={0.9}>
+                    <Pencil size={16} color="#F7F3EA" />
+                  </TouchableOpacity>
+                </View>
+                <Text style={styles.userName}>
+                  {firstName} {lastName}
                 </Text>
+                <Text style={styles.memberSince}>MEMBER SINCE {memberSince}</Text>
               </View>
-              <TouchableOpacity style={styles.editAvatarButton} activeOpacity={0.9}>
-                <Pencil size={16} color="#F7F3EA" />
+
+              <View style={styles.formSection}>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>FIRST NAME</Text>
+                  <TextInput
+                    style={styles.input}
+                    value={firstName}
+                    onChangeText={setFirstName}
+                    placeholder="First Name"
+                    placeholderTextColor="#99A69F"
+                    returnKeyType="next"
+                    onSubmitEditing={() => lastNameRef.current?.focus()}
+                    blurOnSubmit={false}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>LAST NAME</Text>
+                  <TextInput
+                    ref={lastNameRef}
+                    style={styles.input}
+                    value={lastName}
+                    onChangeText={setLastName}
+                    placeholder="Last Name"
+                    placeholderTextColor="#99A69F"
+                    returnKeyType="done"
+                    onSubmitEditing={handleSave}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.label}>EMAIL ADDRESS</Text>
+                  <View style={styles.emailInputWrap}>
+                    <TextInput
+                      style={[styles.input, styles.emailInput]}
+                      value={email}
+                      editable={false}
+                      placeholder="Email Address"
+                      placeholderTextColor="#99A69F"
+                    />
+                    <View style={styles.verifiedBadge}>
+                      <ShieldCheck size={12} color="#1C6A57" />
+                      <Text style={styles.verifiedText}>VERIFIED</Text>
+                    </View>
+                  </View>
+                </View>
+
+                <TouchableOpacity style={styles.securityItem} activeOpacity={0.7}>
+                  <View style={styles.securityTextWrap}>
+                    <Text style={styles.label}>SECURITY</Text>
+                    <Text style={styles.securityValue}>Change Password</Text>
+                  </View>
+                  <ChevronRight size={20} color="#103B31" />
+                </TouchableOpacity>
+              </View>
+
+              <Text style={styles.privacyNote}>
+                Your personal data is managed according to our{' '}
+                <Text style={styles.privacyLink}>Privacy Standards</Text>.
+              </Text>
+
+              <TouchableOpacity
+                style={styles.saveButtonWrap}
+                onPress={handleSave}
+                disabled={saving}
+              >
+                <LinearGradient
+                  colors={['#103B31', '#1C6A57']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.saveButton}
+                >
+                  {saving ? (
+                    <ActivityIndicator size="small" color="#F7F3EA" />
+                  ) : (
+                    <>
+                      <Text style={styles.saveButtonText}>SAVE CHANGES</Text>
+                      <Check size={18} color="#F7F3EA" />
+                    </>
+                  )}
+                </LinearGradient>
               </TouchableOpacity>
             </View>
-            <Text style={styles.userName}>
-              {firstName} {lastName}
-            </Text>
-            <Text style={styles.memberSince}>MEMBER SINCE {memberSince}</Text>
-          </View>
-
-          <View style={styles.formSection}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>FIRST NAME</Text>
-              <TextInput
-                style={styles.input}
-                value={firstName}
-                onChangeText={setFirstName}
-                placeholder="First Name"
-                placeholderTextColor="#99A69F"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>LAST NAME</Text>
-              <TextInput
-                style={styles.input}
-                value={lastName}
-                onChangeText={setLastName}
-                placeholder="Last Name"
-                placeholderTextColor="#99A69F"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.label}>EMAIL ADDRESS</Text>
-              <View style={styles.emailInputWrap}>
-                <TextInput
-                  style={[styles.input, styles.emailInput]}
-                  value={email}
-                  editable={false}
-                  placeholder="Email Address"
-                  placeholderTextColor="#99A69F"
-                />
-                <View style={styles.verifiedBadge}>
-                  <ShieldCheck size={12} color="#1C6A57" />
-                  <Text style={styles.verifiedText}>VERIFIED</Text>
-                </View>
-              </View>
-            </View>
-
-            <TouchableOpacity style={styles.securityItem} activeOpacity={0.7}>
-              <View style={styles.securityTextWrap}>
-                <Text style={styles.label}>SECURITY</Text>
-                <Text style={styles.securityValue}>Change Password</Text>
-              </View>
-              <ChevronRight size={20} color="#103B31" />
-            </TouchableOpacity>
-          </View>
-
-          <Text style={styles.privacyNote}>
-            Your personal data is managed according to our{' '}
-            <Text style={styles.privacyLink}>Privacy Standards</Text>.
-          </Text>
-
-          <TouchableOpacity
-            style={styles.saveButtonWrap}
-            onPress={handleSave}
-            disabled={saving}
-          >
-            <LinearGradient
-              colors={['#103B31', '#1C6A57']}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.saveButton}
-            >
-              {saving ? (
-                <ActivityIndicator size="small" color="#F7F3EA" />
-              ) : (
-                <>
-                  <Text style={styles.saveButtonText}>SAVE CHANGES</Text>
-                  <Check size={18} color="#F7F3EA" />
-                </>
-              )}
-            </LinearGradient>
-          </TouchableOpacity>
+          </TouchableWithoutFeedback>
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>

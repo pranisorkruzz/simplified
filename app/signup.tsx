@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { Redirect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -23,6 +25,8 @@ const DISPLAY_FONT = Platform.select({
 });
 
 export default function SignupScreen() {
+  const passwordRef = useRef<TextInput>(null);
+  const confirmPasswordRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -109,120 +113,134 @@ export default function SignupScreen() {
           },
         ]}
       >
-        <LinearGradient
-          colors={['#103B31', '#1C6A57', '#D7B989']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-          <Text style={styles.eyebrow}>CREATE ACCOUNT</Text>
-          <Text style={styles.heroTitle}>Start with a cleaner workflow</Text>
-          <Text style={styles.heroSubtitle}>
-            Create an account to turn email into trackable tasks, deadlines, and
-            finished work.
-          </Text>
-        </LinearGradient>
-
-        <View style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionPill}>
-              <Sparkles size={14} color="#103B31" />
-              <Text style={styles.sectionPillText}>New Workspace</Text>
-            </View>
-            <Text style={styles.sectionTitle}>Sign Up</Text>
-          </View>
-
-          {error ? (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          {notice ? (
-            <View style={styles.noticeBanner}>
-              <Text style={styles.noticeText}>{notice}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              placeholderTextColor="#7B8A83"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Password</Text>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Create a password"
-              placeholderTextColor="#7B8A83"
-              secureTextEntry
-              autoComplete="password-new"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Confirm Password</Text>
-            <TextInput
-              style={styles.input}
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              placeholder="Confirm your password"
-              placeholderTextColor="#7B8A83"
-              secureTextEntry
-              autoComplete="password-new"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.buttonWrap}
-            onPress={handleSignup}
-            disabled={loading}
-          >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ flex: 1, justifyContent: 'center', gap: 18 }}>
             <LinearGradient
-              colors={['#0F4737', '#216B56']}
+              colors={['#103B31', '#1C6A57', '#D7B989']}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.button}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#F7F3EA" />
-              ) : (
-                <>
-                  <Text style={styles.buttonText}>Create Account</Text>
-                  <ArrowRight size={16} color="#F7F3EA" />
-                </>
-              )}
+              <Text style={styles.eyebrow}>CREATE ACCOUNT</Text>
+              <Text style={styles.heroTitle}>Start with a cleaner workflow</Text>
+              <Text style={styles.heroSubtitle}>
+                Create an account to turn email into trackable tasks, deadlines, and
+                finished work.
+              </Text>
             </LinearGradient>
-          </TouchableOpacity>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?</Text>
-            <TouchableOpacity
-              onPress={() =>
-                router.push({
-                  pathname: '/login',
-                  params: {
-                    ...(isNewUserEntry ? { entry: 'new_user' } : {}),
-                    ...(userTypeParam ? { userType: userTypeParam } : {}),
-                  },
-                })
-              }
-            >
-              <Text style={styles.link}>Sign In</Text>
-            </TouchableOpacity>
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionPill}>
+                  <Sparkles size={14} color="#103B31" />
+                  <Text style={styles.sectionPillText}>New Workspace</Text>
+                </View>
+                <Text style={styles.sectionTitle}>Sign Up</Text>
+              </View>
+
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              {notice ? (
+                <View style={styles.noticeBanner}>
+                  <Text style={styles.noticeText}>{notice}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#7B8A83"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Password</Text>
+                <TextInput
+                  ref={passwordRef}
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Create a password"
+                  placeholderTextColor="#7B8A83"
+                  secureTextEntry
+                  autoComplete="password-new"
+                  returnKeyType="next"
+                  onSubmitEditing={() => confirmPasswordRef.current?.focus()}
+                  blurOnSubmit={false}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Confirm Password</Text>
+                <TextInput
+                  ref={confirmPasswordRef}
+                  style={styles.input}
+                  value={confirmPassword}
+                  onChangeText={setConfirmPassword}
+                  placeholder="Confirm your password"
+                  placeholderTextColor="#7B8A83"
+                  secureTextEntry
+                  autoComplete="password-new"
+                  returnKeyType="done"
+                  onSubmitEditing={handleSignup}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.buttonWrap}
+                onPress={handleSignup}
+                disabled={loading}
+              >
+                <LinearGradient
+                  colors={['#0F4737', '#216B56']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.button}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#F7F3EA" />
+                  ) : (
+                    <>
+                      <Text style={styles.buttonText}>Create Account</Text>
+                      <ArrowRight size={16} color="#F7F3EA" />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Already have an account?</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: '/login',
+                      params: {
+                        ...(isNewUserEntry ? { entry: 'new_user' } : {}),
+                        ...(userTypeParam ? { userType: userTypeParam } : {}),
+                      },
+                    })
+                  }
+                >
+                  <Text style={styles.link}>Sign In</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );

@@ -44,6 +44,9 @@ export default function BriefComposer({
         }
         placeholderTextColor="#7B8A83"
         textAlignVertical="top"
+        returnKeyType="done"
+        onSubmitEditing={onSummarize}
+        blurOnSubmit={true}
       />
 
       {errorMessage ? (

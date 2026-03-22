@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Modal,
   Platform,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -215,142 +217,147 @@ export default function BriefFollowUpSheet({
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           style={styles.keyboardView}
         >
-          <View
-            style={[
-              styles.sheet,
-              { paddingBottom: Math.max(insets.bottom, 24) },
-            ]}
-          >
-            <View style={styles.header}>
-              <View style={styles.headerCopy}>
-                <Text style={styles.eyebrow}>PERSONALIZE CLARIX</Text>
-                <Text style={styles.title}>5 follow-up questions</Text>
-                <Text style={styles.copy}>
-                  Quick context from {headerName} helps Clarix generate a smarter workflow.
-                </Text>
-              </View>
-            </View>
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+              <View
+                style={[
+                  styles.sheet,
+                  { paddingBottom: Math.max(insets.bottom, 24) },
+                ]}
+              >
+                <View style={styles.header}>
+                  <View style={styles.headerCopy}>
+                    <Text style={styles.eyebrow}>PERSONALIZE CLARIX</Text>
+                    <Text style={styles.title}>5 follow-up questions</Text>
+                    <Text style={styles.copy}>
+                      Quick context from {headerName} helps Clarix generate a smarter workflow.
+                    </Text>
+                  </View>
+                </View>
 
-            <View style={styles.progressWrap}>
-              <Text style={styles.progressText}>{`Question ${currentIndex + 1} of ${totalQuestions}`}</Text>
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    {
-                      width: `${((currentIndex + 1) / Math.max(totalQuestions, 1)) * 100}%`,
-                    },
-                  ]}
-                />
-              </View>
-            </View>
+                <View style={styles.progressWrap}>
+                  <Text style={styles.progressText}>{`Question ${currentIndex + 1} of ${totalQuestions}`}</Text>
+                  <View style={styles.progressTrack}>
+                    <View
+                      style={[
+                        styles.progressFill,
+                        {
+                          width: `${((currentIndex + 1) / Math.max(totalQuestions, 1)) * 100}%`,
+                        },
+                      ]}
+                    />
+                  </View>
+                </View>
 
-            <ScrollView
-              style={styles.scrollArea}
-              contentContainerStyle={styles.scrollContent}
-              showsVerticalScrollIndicator={false}
-            >
-              <View style={styles.questionBlock}>
-                <Text style={styles.questionEyebrow}>{`QUESTION ${currentIndex + 1}`}</Text>
-                <Text style={styles.questionText}>{currentQuestion.question}</Text>
+                <ScrollView
+                  style={styles.scrollArea}
+                  contentContainerStyle={styles.scrollContent}
+                  showsVerticalScrollIndicator={false}
+                  keyboardShouldPersistTaps="handled"
+                >
+                  <View style={styles.questionBlock}>
+                    <Text style={styles.questionEyebrow}>{`QUESTION ${currentIndex + 1}`}</Text>
+                    <Text style={styles.questionText}>{currentQuestion.question}</Text>
 
-                <View style={styles.optionWrap}>
-                  {currentQuestion.options.map((option) => {
-                    const selected =
-                      currentAnswer?.answerSource === 'option' &&
-                      currentAnswer.answer === option;
+                    <View style={styles.optionWrap}>
+                      {currentQuestion.options.map((option) => {
+                        const selected =
+                          currentAnswer?.answerSource === 'option' &&
+                          currentAnswer.answer === option;
 
-                    return (
+                        return (
+                          <TouchableOpacity
+                            key={option}
+                            style={[
+                              styles.optionChip,
+                              selected && styles.optionChipSelected,
+                            ]}
+                            onPress={() => selectOption(currentQuestion.id, option)}
+                            activeOpacity={0.85}
+                          >
+                            <Text
+                              style={[
+                                styles.optionChipText,
+                                selected && styles.optionChipTextSelected,
+                              ]}
+                            >
+                              {option}
+                            </Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+
                       <TouchableOpacity
-                        key={option}
                         style={[
                           styles.optionChip,
-                          selected && styles.optionChipSelected,
+                          otherSelected && styles.optionChipSelected,
                         ]}
-                        onPress={() => selectOption(currentQuestion.id, option)}
+                        onPress={() => selectOther(currentQuestion.id)}
                         activeOpacity={0.85}
                       >
                         <Text
                           style={[
                             styles.optionChipText,
-                            selected && styles.optionChipTextSelected,
+                            otherSelected && styles.optionChipTextSelected,
                           ]}
                         >
-                          {option}
+                          {currentQuestion.otherLabel}
                         </Text>
                       </TouchableOpacity>
-                    );
-                  })}
+                    </View>
+
+                    {otherSelected ? (
+                      <TextInput
+                        style={styles.otherInput}
+                        value={currentAnswer?.otherText ?? ''}
+                        onChangeText={(text) => updateOtherText(currentQuestion.id, text)}
+                        placeholder="Write your own answer"
+                        placeholderTextColor="#7B8A83"
+                        returnKeyType="done"
+                        onSubmitEditing={handlePrimaryPress}
+                      />
+                    ) : null}
+                  </View>
+
+                  {sheetError ? (
+                    <View style={styles.errorBanner}>
+                      <Text style={styles.errorText}>{sheetError}</Text>
+                    </View>
+                  ) : null}
+                </ScrollView>
+
+                <View style={styles.actions}>
+                  <TouchableOpacity
+                    style={[
+                      styles.secondaryButton,
+                      currentIndex === 0 && styles.secondaryButtonDisabled,
+                    ]}
+                    onPress={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}
+                    activeOpacity={0.85}
+                    disabled={currentIndex === 0 || saving}
+                  >
+                    <Text style={styles.secondaryButtonText}>Back</Text>
+                  </TouchableOpacity>
 
                   <TouchableOpacity
                     style={[
-                      styles.optionChip,
-                      otherSelected && styles.optionChipSelected,
+                      styles.primaryButton,
+                      (!currentIsComplete || saving) && styles.primaryButtonDisabled,
                     ]}
-                    onPress={() => selectOther(currentQuestion.id)}
+                    onPress={() => void handlePrimaryPress()}
                     activeOpacity={0.85}
+                    disabled={!currentIsComplete || saving}
                   >
-                    <Text
-                      style={[
-                        styles.optionChipText,
-                        otherSelected && styles.optionChipTextSelected,
-                      ]}
-                    >
-                      {currentQuestion.otherLabel}
-                    </Text>
+                    {saving ? (
+                      <ActivityIndicator size="small" color="#F7F3EA" />
+                    ) : (
+                      <Text style={styles.primaryButtonText}>
+                        {isLastQuestion ? 'Generate Kanban' : 'Continue'}
+                      </Text>
+                    )}
                   </TouchableOpacity>
                 </View>
-
-                {otherSelected ? (
-                  <TextInput
-                    style={styles.otherInput}
-                    value={currentAnswer?.otherText ?? ''}
-                    onChangeText={(text) => updateOtherText(currentQuestion.id, text)}
-                    placeholder="Write your own answer"
-                    placeholderTextColor="#7B8A83"
-                  />
-                ) : null}
               </View>
-
-              {sheetError ? (
-                <View style={styles.errorBanner}>
-                  <Text style={styles.errorText}>{sheetError}</Text>
-                </View>
-              ) : null}
-            </ScrollView>
-
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={[
-                  styles.secondaryButton,
-                  currentIndex === 0 && styles.secondaryButtonDisabled,
-                ]}
-                onPress={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}
-                activeOpacity={0.85}
-                disabled={currentIndex === 0 || saving}
-              >
-                <Text style={styles.secondaryButtonText}>Back</Text>
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[
-                  styles.primaryButton,
-                  (!currentIsComplete || saving) && styles.primaryButtonDisabled,
-                ]}
-                onPress={() => void handlePrimaryPress()}
-                activeOpacity={0.85}
-                disabled={!currentIsComplete || saving}
-              >
-                {saving ? (
-                  <ActivityIndicator size="small" color="#F7F3EA" />
-                ) : (
-                  <Text style={styles.primaryButtonText}>
-                    {isLastQuestion ? 'Generate Kanban' : 'Continue'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
+            </TouchableWithoutFeedback>
         </KeyboardAvoidingView>
       </View>
     </Modal>

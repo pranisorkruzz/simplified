@@ -1,12 +1,14 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
+  Keyboard,
   Platform,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import { FunctionsHttpError } from '@supabase/supabase-js';
@@ -29,6 +31,7 @@ const DISPLAY_FONT = Platform.select({
 });
 
 export default function LoginScreen() {
+  const passwordRef = useRef<TextInput>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -190,118 +193,128 @@ export default function LoginScreen() {
           },
         ]}
       >
-        <LinearGradient
-          colors={['#103B31', '#1C6A57', '#D7B989']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.heroCard}
-        >
-          <Text style={styles.eyebrow}>WELCOME BACK</Text>
-          <Text style={styles.heroTitle}>Sign in to your workflow</Text>
-          <Text style={styles.heroSubtitle}>
-            Pick up your briefs, deadlines, and finished tasks exactly where you
-            left them.
-          </Text>
-        </LinearGradient>
-
-        <View style={styles.formCard}>
-          <View style={styles.sectionHeader}>
-            <View style={styles.sectionPill}>
-              <Sparkles size={14} color="#103B31" />
-              <Text style={styles.sectionPillText}>Account Access</Text>
-            </View>
-            <Text style={styles.sectionTitle}>Login</Text>
-          </View>
-
-          {error ? (
-            <View style={styles.errorBanner}>
-              <Text style={styles.errorText}>{error}</Text>
-            </View>
-          ) : null}
-
-          {notice ? (
-            <View style={styles.noticeBanner}>
-              <Text style={styles.noticeText}>{notice}</Text>
-            </View>
-          ) : null}
-
-          <View style={styles.fieldGroup}>
-            <Text style={styles.label}>Email</Text>
-            <TextInput
-              style={styles.input}
-              value={email}
-              onChangeText={setEmail}
-              placeholder="Enter your email"
-              placeholderTextColor="#7B8A83"
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoComplete="email"
-            />
-          </View>
-
-          <View style={styles.fieldGroup}>
-            <View style={styles.passwordLabelRow}>
-              <Text style={styles.label}>Password</Text>
-              <TouchableOpacity
-                onPress={() => void handleForgotPassword()}
-                activeOpacity={0.75}
-                disabled={loading || resetLoading}
-              >
-                <Text style={styles.forgotLink}>
-                  {resetLoading ? 'Sending...' : 'Forgot password?'}
-                </Text>
-              </TouchableOpacity>
-            </View>
-            <TextInput
-              style={styles.input}
-              value={password}
-              onChangeText={setPassword}
-              placeholder="Enter your password"
-              placeholderTextColor="#7B8A83"
-              secureTextEntry
-              autoComplete="password"
-            />
-          </View>
-
-          <TouchableOpacity
-            style={styles.buttonWrap}
-            onPress={handleLogin}
-            disabled={loading}
-          >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <View style={{ flex: 1, justifyContent: 'center', gap: 18 }}>
             <LinearGradient
-              colors={['#0F4737', '#216B56']}
+              colors={['#103B31', '#1C6A57', '#D7B989']}
               start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.button}
+              end={{ x: 1, y: 1 }}
+              style={styles.heroCard}
             >
-              {loading ? (
-                <ActivityIndicator size="small" color="#F7F3EA" />
-              ) : (
-                <>
-                  <Text style={styles.buttonText}>Sign In</Text>
-                  <ArrowRight size={16} color="#F7F3EA" />
-                </>
-              )}
+              <Text style={styles.eyebrow}>WELCOME BACK</Text>
+              <Text style={styles.heroTitle}>Sign in to your workflow</Text>
+              <Text style={styles.heroSubtitle}>
+                Pick up your briefs, deadlines, and finished tasks exactly where you
+                left them.
+              </Text>
             </LinearGradient>
-          </TouchableOpacity>
 
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Do not have an account?</Text>
-            <TouchableOpacity
-              onPress={() =>
-                router.push({
-                  pathname: '/signup',
-                  params: {
-                    ...(isNewUserEntry ? { entry: 'new_user' } : {}),
-                    ...(userTypeParam ? { userType: userTypeParam } : {}),
-                  },
-                })
-              }
-            >
-              <Text style={styles.link}>Sign Up</Text>
-            </TouchableOpacity>
+            <View style={styles.formCard}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionPill}>
+                  <Sparkles size={14} color="#103B31" />
+                  <Text style={styles.sectionPillText}>Account Access</Text>
+                </View>
+                <Text style={styles.sectionTitle}>Login</Text>
+              </View>
+
+              {error ? (
+                <View style={styles.errorBanner}>
+                  <Text style={styles.errorText}>{error}</Text>
+                </View>
+              ) : null}
+
+              {notice ? (
+                <View style={styles.noticeBanner}>
+                  <Text style={styles.noticeText}>{notice}</Text>
+                </View>
+              ) : null}
+
+              <View style={styles.fieldGroup}>
+                <Text style={styles.label}>Email</Text>
+                <TextInput
+                  style={styles.input}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="Enter your email"
+                  placeholderTextColor="#7B8A83"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                  autoComplete="email"
+                  returnKeyType="next"
+                  onSubmitEditing={() => passwordRef.current?.focus()}
+                  blurOnSubmit={false}
+                />
+              </View>
+
+              <View style={styles.fieldGroup}>
+                <View style={styles.passwordLabelRow}>
+                  <Text style={styles.label}>Password</Text>
+                  <TouchableOpacity
+                    onPress={() => void handleForgotPassword()}
+                    activeOpacity={0.75}
+                    disabled={loading || resetLoading}
+                  >
+                    <Text style={styles.forgotLink}>
+                      {resetLoading ? 'Sending...' : 'Forgot password?'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+                <TextInput
+                  ref={passwordRef}
+                  style={styles.input}
+                  value={password}
+                  onChangeText={setPassword}
+                  placeholder="Enter your password"
+                  placeholderTextColor="#7B8A83"
+                  secureTextEntry
+                  autoComplete="password"
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
+                />
+              </View>
+
+              <TouchableOpacity
+                style={styles.buttonWrap}
+                onPress={handleLogin}
+                disabled={loading}
+              >
+                <LinearGradient
+                  colors={['#0F4737', '#216B56']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={styles.button}
+                >
+                  {loading ? (
+                    <ActivityIndicator size="small" color="#F7F3EA" />
+                  ) : (
+                    <>
+                      <Text style={styles.buttonText}>Sign In</Text>
+                      <ArrowRight size={16} color="#F7F3EA" />
+                    </>
+                  )}
+                </LinearGradient>
+              </TouchableOpacity>
+
+              <View style={styles.footer}>
+                <Text style={styles.footerText}>Do not have an account?</Text>
+                <TouchableOpacity
+                  onPress={() =>
+                    router.push({
+                      pathname: '/signup',
+                      params: {
+                        ...(isNewUserEntry ? { entry: 'new_user' } : {}),
+                        ...(userTypeParam ? { userType: userTypeParam } : {}),
+                      },
+                    })
+                  }
+                >
+                  <Text style={styles.link}>Sign Up</Text>
+                </TouchableOpacity>
+              </View>
+            </View>
           </View>
-        </View>
+        </TouchableWithoutFeedback>
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
