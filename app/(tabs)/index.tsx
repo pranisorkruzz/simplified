@@ -246,6 +246,15 @@ export default function BriefsScreen() {
     );
   };
 
+  const handleSelectAll = () => {
+    if (selectedBriefIds.length === briefs.length) {
+      setSelectedBriefIds([]);
+    } else {
+      setSelectedBriefIds(briefs.map((b) => b.id));
+    }
+    void Haptics.selectionAsync();
+  };
+
   const performDeleteSelected = async () => {
     if (!user || selectedBriefIds.length === 0) {
       return;
@@ -255,11 +264,14 @@ export default function BriefsScreen() {
     setErrorMessage('');
 
     try {
-      const { error } = await deleteBriefsByIds(user.id, selectedBriefIds);
+      const { error, data } = await deleteBriefsByIds(user.id, selectedBriefIds);
 
       if (error) {
         throw error;
       }
+
+      const deletedCount = data?.length ?? 0;
+      console.log(`Successfully deleted ${deletedCount} chat records`);
 
       const feed = await fetchBriefFeed(user.id);
       applyBriefFeed(feed);
@@ -372,6 +384,19 @@ export default function BriefsScreen() {
             <View style={styles.headerActions}>
               {selectionMode ? (
                 <>
+                  <TouchableOpacity
+                    style={styles.headerSecondaryButton}
+                    onPress={handleSelectAll}
+                    activeOpacity={0.85}
+                    disabled={deleting}
+                  >
+                    <Text style={styles.headerSecondaryButtonText}>
+                      {selectedBriefIds.length === briefs.length
+                        ? 'Deselect All'
+                        : 'Select All'}
+                    </Text>
+                  </TouchableOpacity>
+
                   <TouchableOpacity
                     style={styles.headerSecondaryButton}
                     onPress={toggleSelectionMode}

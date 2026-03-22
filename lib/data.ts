@@ -18,10 +18,10 @@ type ChatBriefPayloadRow = {
 };
 
 export async function fetchBriefFeed(userId: string) {
-  const [baseChatsQuery, tasksQuery] = await Promise.all([
+  const [chatsQuery, tasksQuery] = await Promise.all([
     supabase
       .from('chats')
-      .select('id, role, message, created_at')
+      .select('id, role, message, created_at, brief_payload')
       .eq('user_id', userId)
       .order('created_at', { ascending: false }),
     supabase
@@ -30,41 +30,33 @@ export async function fetchBriefFeed(userId: string) {
       .eq('user_id', userId),
   ]);
 
-  if (baseChatsQuery.error) {
-    throw baseChatsQuery.error;
+  if (chatsQuery.error) {
+    if (isMissingColumnError(chatsQuery.error, 'brief_payload')) {
+      // Fallback for when brief_payload column is not yet present
+      const fallbackChatsQuery = await supabase
+        .from('chats')
+        .select('id, role, message, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+
+      if (fallbackChatsQuery.error) {
+        throw fallbackChatsQuery.error;
+      }
+
+      return {
+        chats: (fallbackChatsQuery.data ?? []) as BriefFeedChatRow[],
+        tasks: (tasksQuery.data ?? []) as BriefTaskStatusRow[],
+      };
+    }
+    throw chatsQuery.error;
   }
 
   if (tasksQuery.error) {
     throw tasksQuery.error;
   }
 
-  const briefPayloadQuery = await supabase
-    .from('chats')
-    .select('id, brief_payload')
-    .eq('user_id', userId);
-
-  if (
-    briefPayloadQuery.error &&
-    !isMissingColumnError(briefPayloadQuery.error, 'brief_payload')
-  ) {
-    throw briefPayloadQuery.error;
-  }
-
-  const briefPayloadById = new Map<string, unknown | null>(
-    isMissingColumnError(briefPayloadQuery.error, 'brief_payload')
-      ? []
-      : (briefPayloadQuery.data as ChatBriefPayloadRow[] | null | undefined)?.map(
-          (chat) => [chat.id, chat.brief_payload],
-        ) ?? [],
-  );
-
-  const chats = (baseChatsQuery.data ?? []).map((chat) => ({
-    ...chat,
-    brief_payload: briefPayloadById.get(chat.id) ?? null,
-  })) as BriefFeedChatRow[];
-
   return {
-    chats,
+    chats: (chatsQuery.data ?? []) as BriefFeedChatRow[],
     tasks: (tasksQuery.data ?? []) as BriefTaskStatusRow[],
   };
 }
@@ -151,14 +143,30 @@ export async function insertTasksForBrief(userId: string, brief: BriefCardData) 
 
 export async function deleteBriefsByIds(userId: string, briefIds: string[]) {
   if (briefIds.length === 0) {
-    return { error: null };
+    return { error: null, data: [] };
   }
+
+  // First fetch the records to get their created_at timestamps
+  // This allows us to delete both the assistant record and the preceding user record
+  // because they were inserted together and share the exact same timestamp.
+  const { data: records, error: fetchError } = await supabase
+    .from('chats')
+    .select('created_at')
+    .eq('user_id', userId)
+    .in('id', briefIds);
+
+  if (fetchError || !records || records.length === 0) {
+    return { error: fetchError, data: [] };
+  }
+
+  const timestamps = Array.from(new Set(records.map((r) => r.created_at)));
 
   return supabase
     .from('chats')
     .delete()
     .eq('user_id', userId)
-    .in('id', briefIds);
+    .in('created_at', timestamps)
+    .select('id');
 }
 
 export async function fetchTaskFeed(userId: string) {
