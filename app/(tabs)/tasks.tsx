@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from '@react-navigation/native';
 import {
   ActivityIndicator,
@@ -20,10 +20,13 @@ import {
   Sparkles,
 } from 'lucide-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { fetchTaskFeed } from '@/lib/data';
+import { useKanban } from '@/contexts/KanbanContext';
+import { fetchTaskFeed, updateBriefPayload } from '@/lib/data';
+import type { EmailBrief, KanbanPlan } from '@/lib/briefs';
 import { getSupabaseErrorMessage, supabase } from '@/lib/supabase';
 import TaskCard from '@/components/TaskCard';
 import DeadlineModal from '@/components/DeadlineModal';
+import TaskFlowchart from '@/components/TaskFlowchart';
 import { TaskRow } from '@/types/database';
 import { formatDeadlineInputValue, parseManualDeadlineInput } from '@/utils/formatters';
 
@@ -55,6 +58,7 @@ function getBriefFilterLabel(task: TaskRow) {
 
 export default function TasksScreen() {
   const { user } = useAuth();
+  const { activeBriefId, activeBrief, setActiveBrief, isGenerating } = useKanban();
   const insets = useSafeAreaInsets();
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -66,6 +70,7 @@ export default function TasksScreen() {
   const [deadlineFeatureAvailable, setDeadlineFeatureAvailable] = useState(true);
   const [savingDeadline, setSavingDeadline] = useState(false);
   const [selectedActiveFilter, setSelectedActiveFilter] = useState(ALL_ACTIVE_FILTER);
+  const [savingKanban, setSavingKanban] = useState(false);
 
   const applyTaskFeed = useCallback((
     feed: Awaited<ReturnType<typeof fetchTaskFeed>>,
@@ -244,6 +249,44 @@ export default function TasksScreen() {
     closeDeadlineEditor();
   };
 
+  const persistBriefKanban = async (
+    briefId: string,
+    nextPlan: KanbanPlan,
+  ) => {
+    if (!user || !activeBrief) {
+      return;
+    }
+
+    const nextBrief: EmailBrief = {
+      ...activeBrief,
+      kanbanPlan: nextPlan,
+    };
+
+    const { error } = await updateBriefPayload(user.id, briefId, nextBrief);
+
+    if (error) {
+      throw error;
+    }
+
+    setActiveBrief(briefId, nextBrief);
+  };
+
+  const handleKanbanPlanChange = async (nextPlan: KanbanPlan) => {
+    if (!activeBrief || !activeBriefId) {
+      return;
+    }
+
+    setSavingKanban(true);
+
+    try {
+      await persistBriefKanban(activeBriefId, nextPlan);
+    } catch (error) {
+      setScreenError(getSupabaseErrorMessage(error, 'Failed to save kanban'));
+    } finally {
+      setSavingKanban(false);
+    }
+  };
+
   const activeTasks = tasks.filter((task) => !task.completed);
   const finishedTasks = tasks.filter((task) => task.completed);
   const activeTaskGroups = Array.from(
@@ -311,6 +354,22 @@ export default function TasksScreen() {
           <View style={styles.errorBanner}>
             <Text style={styles.errorBannerText}>{screenError}</Text>
           </View>
+        ) : null}
+
+        {isGenerating ? (
+          <View style={styles.kanbanLoadingCard}>
+            <ActivityIndicator size="small" color="#0F4737" />
+            <Text style={styles.kanbanLoadingTitle}>Building your execution board</Text>
+            <Text style={styles.kanbanLoadingCopy}>
+              Clarix is generating your Kanban flowchart — it will appear here in a moment.
+            </Text>
+          </View>
+        ) : activeBrief?.kanbanPlan ? (
+          <TaskFlowchart
+            plan={activeBrief.kanbanPlan}
+            saving={savingKanban}
+            onPlanChange={handleKanbanPlanChange}
+          />
         ) : null}
 
         {loading ? (
@@ -590,6 +649,26 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptyCopy: {
+    color: '#5A6A63',
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
+  },
+  kanbanLoadingCard: {
+    backgroundColor: '#FBF8F2',
+    borderRadius: 26,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 10,
+  },
+  kanbanLoadingTitle: {
+    color: '#102D24',
+    fontFamily: DISPLAY_FONT,
+    fontSize: 22,
+    textAlign: 'center',
+  },
+  kanbanLoadingCopy: {
     color: '#5A6A63',
     fontSize: 14,
     lineHeight: 21,

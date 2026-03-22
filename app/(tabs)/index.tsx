@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +17,7 @@ import {
   useSafeAreaInsets,
 } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
+import { useKanban } from '@/contexts/KanbanContext';
 import {
   buildBriefCards,
   buildLinkedTaskIds,
@@ -40,7 +41,6 @@ import BriefCardItem from '@/components/BriefCard';
 import BriefFollowUpSheet from '@/components/BriefFollowUpSheet';
 import BriefsHero from '@/components/BriefsHero';
 import BriefComposer from '@/components/BriefComposer';
-import BriefKanbanBoard from '@/components/BriefKanbanBoard';
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -50,6 +50,7 @@ const DISPLAY_FONT = Platform.select({
 
 export default function BriefsScreen() {
   const { user, profile, updateAiContext } = useAuth();
+  const { setActiveBrief, setIsGenerating } = useKanban();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [briefs, setBriefs] = useState<BriefCardData[]>([]);
@@ -64,11 +65,6 @@ export default function BriefsScreen() {
   const [deleting, setDeleting] = useState(false);
   const [followUpVisible, setFollowUpVisible] = useState(false);
   const [savingFollowUp, setSavingFollowUp] = useState(false);
-  const [kanbanBusy, setKanbanBusy] = useState(false);
-  const [generatingKanban, setGeneratingKanban] = useState(false);
-  const [activeKanbanBriefId, setActiveKanbanBriefId] = useState<string | null>(
-    null,
-  );
   const [latestSourceTask, setLatestSourceTask] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
   const [taskStats, setTaskStats] = useState({
@@ -86,14 +82,6 @@ export default function BriefsScreen() {
 
     setBriefs(nextBriefs);
     setTaskStats(buildTaskStats(feed.tasks));
-    setActiveKanbanBriefId((prev) => {
-      if (prev && nextBriefs.some((brief) => brief.id === prev)) {
-        return prev;
-      }
-
-      const firstWithKanban = nextBriefs.find((brief) => Boolean(brief.kanbanPlan));
-      return firstWithKanban?.id ?? null;
-    });
     setErrorMessage('');
   };
 
@@ -170,18 +158,6 @@ export default function BriefsScreen() {
     );
   }, [briefs]);
 
-  const activeKanbanBrief = useMemo(() => {
-    if (!activeKanbanBriefId) {
-      return briefs.find((brief) => Boolean(brief.kanbanPlan)) ?? null;
-    }
-
-    return (
-      briefs.find((brief) => brief.id === activeKanbanBriefId) ??
-      briefs.find((brief) => Boolean(brief.kanbanPlan)) ??
-      null
-    );
-  }, [activeKanbanBriefId, briefs]);
-
   const handleSummarize = async () => {
     if (!draftEmail.trim() || !user) {
       return;
@@ -205,7 +181,7 @@ export default function BriefsScreen() {
       setBriefs((prev) => [newBrief, ...prev]);
       setLatestBrief(newBrief);
       setLatestSourceTask(sourceEmail);
-      setActiveKanbanBriefId(newBrief.id);
+      setActiveBrief(newBrief.id, newBrief);
       setDraftEmail('');
       setFollowUpVisible(true);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -408,7 +384,7 @@ export default function BriefsScreen() {
 
     try {
       setSavingFollowUp(true);
-      setGeneratingKanban(true);
+      setIsGenerating(true);
       setErrorMessage('');
       await updateAiContext(buildUserAiContext(profile?.user_type, responses));
 
@@ -419,7 +395,7 @@ export default function BriefsScreen() {
       });
 
       await persistBriefKanban(latestBrief.id, plan);
-      setActiveKanbanBriefId(latestBrief.id);
+      setActiveBrief(latestBrief.id, { ...latestBrief, kanbanPlan: plan });
       setFollowUpVisible(false);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
@@ -431,23 +407,7 @@ export default function BriefsScreen() {
       );
     } finally {
       setSavingFollowUp(false);
-      setGeneratingKanban(false);
-    }
-  };
-
-  const handleKanbanPlanChange = async (
-    briefId: string,
-    nextPlan: KanbanPlan,
-  ) => {
-    setKanbanBusy(true);
-
-    try {
-      await persistBriefKanban(briefId, nextPlan);
-    } catch (error) {
-      setErrorMessage(getSupabaseErrorMessage(error, 'Failed to save kanban'));
-      throw error;
-    } finally {
-      setKanbanBusy(false);
+      setIsGenerating(false);
     }
   };
 
@@ -485,24 +445,6 @@ export default function BriefsScreen() {
           submitting={submitting}
           onSummarize={handleSummarize}
         />
-
-        {generatingKanban ? (
-          <View style={styles.kanbanLoadingCard}>
-            <ActivityIndicator size="small" color="#0F4737" />
-            <Text style={styles.kanbanLoadingTitle}>Generating kanban flowchart</Text>
-            <Text style={styles.kanbanLoadingCopy}>
-              Clarix is mapping subtasks and dependencies from your 5 answers.
-            </Text>
-          </View>
-        ) : activeKanbanBrief?.kanbanPlan ? (
-          <BriefKanbanBoard
-            plan={activeKanbanBrief.kanbanPlan}
-            saving={kanbanBusy}
-            onPlanChange={(nextPlan) =>
-              handleKanbanPlanChange(activeKanbanBrief.id, nextPlan)
-            }
-          />
-        ) : null}
 
         <View style={styles.listHeader}>
           <View style={styles.listHeaderCopy}>
@@ -724,26 +666,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   emptyCopy: {
-    color: '#5A6A63',
-    fontSize: 14,
-    lineHeight: 21,
-    textAlign: 'center',
-  },
-  kanbanLoadingCard: {
-    backgroundColor: '#FBF8F2',
-    borderRadius: 26,
-    padding: 24,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-  },
-  kanbanLoadingTitle: {
-    color: '#143229',
-    fontFamily: DISPLAY_FONT,
-    fontSize: 24,
-    textAlign: 'center',
-  },
-  kanbanLoadingCopy: {
     color: '#5A6A63',
     fontSize: 14,
     lineHeight: 21,
