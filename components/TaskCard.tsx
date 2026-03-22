@@ -46,8 +46,6 @@ export default function TaskCard({
   const deadlineTone = getDeadlineTone(task.deadline_at);
   const hasDeadline = Boolean(task.deadline_at);
   const hasPriority = Boolean(task.brief?.priority);
-  const taskCount = task.brief?.actionItems.length ?? 1;
-  const taskPosition = Math.min(task.order_index + 1, taskCount);
 
   useEffect(() => {
     Animated.timing(entrance, {
@@ -121,13 +119,8 @@ export default function TaskCard({
         {task.title}
       </Text>
 
-      <View style={styles.sourceMetaRow}>
-        <Text
-          style={[styles.sourceMetaLabel, task.completed && styles.finishedBody]}
-        >
-          {`Step ${taskPosition} of ${taskCount}`}
-        </Text>
-        {task.brief?.title ? (
+      {task.brief?.title && (
+        <View style={styles.sourceMetaRow}>
           <Text
             style={[
               styles.sourceMetaBrief,
@@ -137,8 +130,8 @@ export default function TaskCard({
           >
             {task.brief.title}
           </Text>
-        ) : null}
-      </View>
+        </View>
+      )}
 
       <Text style={[styles.taskSummary, task.completed && styles.finishedBody]}>
         {task.brief?.summary || 'Task captured from your email brief.'}

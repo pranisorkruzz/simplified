@@ -19,7 +19,7 @@ npm install
 ```bash
 supabase functions deploy summarize-email
 supabase secrets set GEMINI_API_KEY=your-key
-supabase secrets set GEMINI_MODEL=gemini-flash-latest
+supabase secrets set GEMINI_MODEL=gemini-2.5-flash
 ```
 
 ## Commands

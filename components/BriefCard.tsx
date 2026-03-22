@@ -137,15 +137,6 @@ export default function BriefCardItem({
         <Text style={styles.briefTitle}>{brief.title}</Text>
         <Text style={styles.briefSummary}>{brief.summary}</Text>
 
-        <View style={styles.actionsBlock}>
-          {brief.actionItems.map((item) => (
-            <View key={`${brief.id}-${item}`} style={styles.actionRow}>
-              <View style={styles.actionDot} />
-              <Text style={styles.actionText}>{item}</Text>
-            </View>
-          ))}
-        </View>
-
         <TouchableOpacity
           style={[
             styles.addTaskButton,
@@ -160,7 +151,7 @@ export default function BriefCardItem({
             <>
               <CheckCheck size={16} color="#F7F3EA" />
               <Text style={styles.addTaskButtonText}>
-                Added {brief.actionItems.length} Tasks
+                Added Task
               </Text>
             </>
           ) : selectionMode ? (
@@ -169,7 +160,7 @@ export default function BriefCardItem({
             <>
               <Plus size={16} color="#F7F3EA" />
               <Text style={styles.addTaskButtonText}>
-                Add {brief.actionItems.length} Small Tasks
+                Add Task
               </Text>
               <ArrowRight size={16} color="#F7F3EA" />
             </>

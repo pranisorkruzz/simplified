@@ -120,7 +120,14 @@ const GENERIC_QUESTIONS: FollowUpQuestion[] = [
   },
 ];
 
-export function getFollowUpQuestions(userType?: UserType | null) {
+export function getFollowUpQuestions(
+  userType?: UserType | null,
+  contextualQuestions?: FollowUpQuestion[],
+) {
+  if (contextualQuestions && contextualQuestions.length > 0) {
+    return contextualQuestions;
+  }
+
   if (userType === 'student') {
     return STUDENT_QUESTIONS;
   }

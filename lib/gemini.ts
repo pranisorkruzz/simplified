@@ -74,7 +74,7 @@ function isFunctionUnavailableError(error: unknown) {
 
 async function requestGeminiFromClient(emailText: string): Promise<EmailBrief> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.0-flash';
+  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -97,7 +97,15 @@ Return strict JSON only with this exact shape:
   "timeLabel": "explicit meeting time if present, otherwise No set time",
   "deadlineAt": "ISO 8601 datetime if a clear deadline exists, otherwise null",
   "priority": "high" | "medium" | "low",
-  "actionItems": ["small step", "small step", "small step"]
+  "actionItems": ["small step", "small step", "small step"],
+  "suggestedFollowUpQuestions": [
+    {
+      "id": "unique_id_string",
+      "question": "Specific question about the context of this email",
+      "options": ["Option A", "Option B", "Option C"],
+      "otherLabel": "Other"
+    }
+  ]
 }
 
 Rules:
@@ -112,6 +120,8 @@ Rules:
 - Start each action item with a verb.
 - Do not wrap the JSON in markdown fences.
 - Extract the most important next action, not every possible task.
+- suggestedFollowUpQuestions must contain 3 to 4 questions that help Clarix understand the user's specific context, preferences, or stakes related to THIS EMAIL.
+- Questions should be probing but helpful (e.g., "How critical is this client to your current quarterly goals?" or "What is your preferred tone for this type of follow-up?").
 ${userContextPrompt}
 
 Email:

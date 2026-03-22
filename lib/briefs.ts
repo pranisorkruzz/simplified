@@ -7,6 +7,12 @@ export interface EmailBrief {
   deadlineAt: string | null;
   priority: EmailBriefPriority;
   actionItems: string[];
+  suggestedFollowUpQuestions?: {
+    id: string;
+    question: string;
+    options: string[];
+    otherLabel: string;
+  }[];
 }
 
 type BriefRecord = {
@@ -40,6 +46,14 @@ export function buildFallbackBrief(emailText: string): EmailBrief {
       'Review the email details',
       'Prepare the needed response',
       'Send the follow-up',
+    ],
+    suggestedFollowUpQuestions: [
+      {
+        id: 'fallback_detail',
+        question: 'What is the most critical detail here?',
+        options: ['The deadline', 'The specific request', 'The stakeholders'],
+        otherLabel: 'Other',
+      },
     ],
   };
 }
@@ -83,6 +97,33 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
         .slice(0, 5)
     : [];
 
+  const suggestedFollowUpQuestions = Array.isArray(
+    parsed.suggestedFollowUpQuestions
+  )
+    ? parsed.suggestedFollowUpQuestions
+        .map((q) => {
+          if (typeof q !== 'object' || !q) return null;
+          const question = q.question?.trim();
+          const options = Array.isArray(q.options)
+            ? q.options
+                .filter((o): o is string => typeof o === 'string')
+                .map((o) => o.trim())
+                .filter(Boolean)
+            : [];
+
+          if (!question || options.length === 0) return null;
+
+          return {
+            id: q.id?.trim() || `q_${Math.random().toString(36).slice(2, 9)}`,
+            question,
+            options: options.slice(0, 4),
+            otherLabel: q.otherLabel?.trim() || 'Other',
+          };
+        })
+        .filter((q): q is NonNullable<typeof q> => Boolean(q))
+        .slice(0, 3)
+    : [];
+
   if (!title || !summary) {
     return null;
   }
@@ -101,6 +142,10 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
             'Prepare the next step',
             'Send the response',
           ],
+    suggestedFollowUpQuestions:
+      suggestedFollowUpQuestions.length > 0
+        ? suggestedFollowUpQuestions
+        : undefined,
   };
 }
 

@@ -50,6 +50,7 @@ export default function BriefsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const [briefs, setBriefs] = useState<BriefCardData[]>([]);
+  const [latestBrief, setLatestBrief] = useState<BriefCardData | null>(null);
   const [draftEmail, setDraftEmail] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -65,7 +66,10 @@ export default function BriefsScreen() {
     active: 0,
     finished: 0,
   });
-  const followUpQuestions = getFollowUpQuestions(profile?.user_type);
+  const followUpQuestions = getFollowUpQuestions(
+    profile?.user_type,
+    latestBrief?.suggestedFollowUpQuestions,
+  );
   const existingAiContext = readUserAiContextFromMetadata(user?.user_metadata);
 
   const applyBriefFeed = (feed: Awaited<ReturnType<typeof fetchBriefFeed>>) => {
@@ -160,15 +164,15 @@ export default function BriefsScreen() {
       const sourceEmail = draftEmail.trim();
       const { brief, assistantChat } = await createBriefFromEmail(sourceEmail);
 
-      setBriefs((prev) => [
-        {
-          ...brief,
-          id: assistantChat.id,
-          createdAt: assistantChat.created_at,
-          addedToTasks: false,
-        },
-        ...prev,
-      ]);
+      const newBrief = {
+        ...brief,
+        id: assistantChat.id,
+        createdAt: assistantChat.created_at,
+        addedToTasks: false,
+      };
+
+      setBriefs((prev) => [newBrief, ...prev]);
+      setLatestBrief(newBrief);
       setDraftEmail('');
       setFollowUpVisible(true);
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -209,7 +213,7 @@ export default function BriefsScreen() {
       );
       setTaskStats((prev) => ({
         ...prev,
-        active: prev.active + brief.actionItems.length,
+        active: prev.active + 1,
       }));
       if (insertedWithoutDeadline) {
         setErrorMessage(

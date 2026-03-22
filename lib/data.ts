@@ -103,27 +103,16 @@ export function buildLinkedTaskIds(tasks: BriefTaskStatusRow[]) {
 }
 
 export async function insertTasksForBrief(userId: string, brief: BriefCardData) {
-  const baseRows = brief.actionItems.map((item, index) => ({
+  const baseRow = {
     user_id: userId,
     chat_id: brief.id,
-    title: item,
-    order_index: index,
+    title: brief.title,
+    order_index: 0,
     completed: false,
-  }));
+    deadline_at: brief.deadlineAt || null,
+  };
 
-  if (!brief.deadlineAt) {
-    return {
-      ...(await supabase.from('tasks').insert(baseRows)),
-      insertedWithoutDeadline: false,
-    };
-  }
-
-  const { error } = await supabase.from('tasks').insert(
-    baseRows.map((row) => ({
-      ...row,
-      deadline_at: brief.deadlineAt,
-    })),
-  );
+  const { error } = await supabase.from('tasks').insert([baseRow]);
 
   if (!error) {
     return { error: null, insertedWithoutDeadline: false };
@@ -133,7 +122,9 @@ export async function insertTasksForBrief(userId: string, brief: BriefCardData) 
     return { error, insertedWithoutDeadline: false };
   }
 
-  const retry = await supabase.from('tasks').insert(baseRows);
+  // Fallback if deadline_at column is missing
+  const { deadline_at, ...rowWithoutDeadline } = baseRow;
+  const retry = await supabase.from('tasks').insert([rowWithoutDeadline]);
 
   return {
     ...retry,

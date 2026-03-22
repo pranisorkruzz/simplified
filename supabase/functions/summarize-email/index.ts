@@ -2,6 +2,13 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 type EmailBriefPriority = 'high' | 'medium' | 'low';
 
+type EmailBriefQuestion = {
+  id: string;
+  question: string;
+  options: string[];
+  otherLabel: string;
+};
+
 type EmailBrief = {
   title: string;
   summary: string;
@@ -9,6 +16,7 @@ type EmailBrief = {
   deadlineAt: string | null;
   priority: EmailBriefPriority;
   actionItems: string[];
+  suggestedFollowUpQuestions?: EmailBriefQuestion[];
 };
 
 type GeminiResponse = {
@@ -152,6 +160,33 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
         .slice(0, 5)
     : [];
 
+  const suggestedFollowUpQuestions = Array.isArray(
+    parsed.suggestedFollowUpQuestions
+  )
+    ? parsed.suggestedFollowUpQuestions
+        .map((q) => {
+          if (typeof q !== 'object' || !q) return null;
+          const question = q.question?.trim();
+          const options = Array.isArray(q.options)
+            ? q.options
+                .filter((o): o is string => typeof o === 'string')
+                .map((o) => o.trim())
+                .filter(Boolean)
+            : [];
+
+          if (!question || options.length === 0) return null;
+
+          return {
+            id: q.id?.trim() || `q_${Math.random().toString(36).slice(2, 9)}`,
+            question,
+            options: options.slice(0, 4),
+            otherLabel: q.otherLabel?.trim() || 'Other',
+          };
+        })
+        .filter((q): q is NonNullable<typeof q> => Boolean(q))
+        .slice(0, 3)
+    : [];
+
   if (!title || !summary) {
     return null;
   }
@@ -170,6 +205,10 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
             'Prepare the next step',
             'Send the response',
           ],
+    suggestedFollowUpQuestions:
+      suggestedFollowUpQuestions.length > 0
+        ? suggestedFollowUpQuestions
+        : undefined,
   };
 }
 
@@ -225,7 +264,7 @@ async function requestGemini(
   userContext: UserAiContext | null,
 ): Promise<EmailBrief> {
   const apiKey = Deno.env.get('GEMINI_API_KEY');
-  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-flash-latest';
+  const model = Deno.env.get('GEMINI_MODEL') || 'gemini-2.5-flash';
   const userContextPrompt = buildAiContextPrompt(userContext);
 
   if (!apiKey) {
@@ -243,7 +282,15 @@ Return strict JSON only with this exact shape:
   "timeLabel": "explicit meeting time if present, otherwise No set time",
   "deadlineAt": "ISO 8601 datetime if a clear deadline exists, otherwise null",
   "priority": "high" | "medium" | "low",
-  "actionItems": ["small step", "small step", "small step"]
+  "actionItems": ["small step", "small step", "small step"],
+  "suggestedFollowUpQuestions": [
+    {
+      "id": "unique_id_string",
+      "question": "Specific question about the context of this email",
+      "options": ["Option A", "Option B", "Option C"],
+      "otherLabel": "Other"
+    }
+  ]
 }
 
 Rules:
@@ -258,6 +305,8 @@ Rules:
 - Start each action item with a verb.
 - Do not wrap the JSON in markdown fences.
 - Extract the most important next action, not every possible task.
+- suggestedFollowUpQuestions must contain 3 to 4 questions that help Clarix understand the user's specific context, preferences, or stakes related to THIS EMAIL.
+- Questions should be probing but helpful (e.g., "How critical is this client to your current quarterly goals?" or "What is your preferred tone for this type of follow-up?").
 ${userContextPrompt}
 
 Email:
