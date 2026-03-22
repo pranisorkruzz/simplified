@@ -441,7 +441,7 @@ export default function BriefsScreen() {
             />
           }
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false} disabled={Platform.OS === 'web'}>
             <View>
               <BriefsHero
                 briefsCount={briefs.length}

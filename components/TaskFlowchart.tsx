@@ -12,7 +12,7 @@ import {
   Dimensions,
   ActivityIndicator,
 } from 'react-native';
-import Svg, { Path, Marker, Defs, Polygon, Rect } from 'react-native-svg';
+import Svg, { Path, Marker, Defs, Polygon, Rect, Circle as SVGCircle } from 'react-native-svg';
 import {
   CheckCircle2,
   Circle,
@@ -86,10 +86,10 @@ function calculateLayout(
     levelGroups.get(level)!.push(id);
   });
 
-  const nodeWidth = 160;
-  const nodeHeight = 100;
-  const horizontalGap = 40;
-  const verticalGap = 80;
+  const nodeWidth = 110;
+  const nodeHeight = 110;
+  const horizontalGap = 16;
+  const verticalGap = 40;
 
   levelGroups.forEach((ids, level) => {
     const totalLevelWidth = ids.length * nodeWidth + (ids.length - 1) * horizontalGap;
@@ -128,8 +128,18 @@ const NodeShape = ({
   children: React.ReactNode;
   onPress: () => void;
 }) => {
-  const nodeColor = isDone ? '#D9F0E8' : isActive ? '#E1ECE7' : '#FFFFFF';
-  const borderColor = isDone ? '#4CAF50' : isActive ? '#0F4737' : '#CBBEAA';
+  const baseRectColor = '#5B7489';
+  const baseDiamondColor = '#3B3E40';
+  const doneColor = '#1B6A53';
+
+  let backgroundColor = '#FFFFFF';
+  let borderColor = 'transparent';
+
+  if (isDone) {
+    backgroundColor = doneColor;
+  } else {
+    backgroundColor = type === 'decision' ? baseDiamondColor : baseRectColor;
+  }
 
   if (type === 'decision') {
     return (
@@ -138,7 +148,7 @@ const NodeShape = ({
         onPress={onPress}
         style={styles.diamondWrapper}
       >
-        <View style={[styles.diamond, { backgroundColor: nodeColor, borderColor }]}>
+        <View style={[styles.diamond, { backgroundColor, borderColor }]}>
           <View style={styles.diamondContent}>{children}</View>
         </View>
       </TouchableOpacity>
@@ -149,7 +159,7 @@ const NodeShape = ({
     <TouchableOpacity
       activeOpacity={0.8}
       onPress={onPress}
-      style={[styles.rectNode, { backgroundColor: nodeColor, borderColor }]}
+      style={[styles.rectNode, { backgroundColor, borderColor }]}
     >
       {children}
     </TouchableOpacity>
@@ -299,6 +309,16 @@ export default function TaskFlowchart({
           >
             <Defs>
               <Marker
+                id="dot"
+                viewBox="0 0 10 10"
+                refX="5"
+                refY="5"
+                markerWidth="4"
+                markerHeight="4"
+              >
+                <SVGCircle cx="5" cy="5" r="4" fill="#333333" />
+              </Marker>
+              <Marker
                 id="arrow"
                 viewBox="0 0 10 10"
                 refX="5"
@@ -307,7 +327,7 @@ export default function TaskFlowchart({
                 markerHeight="6"
                 orient="auto-start-reverse"
               >
-                <Path d="M 0 0 L 10 5 L 0 10 z" fill="#A3B8B0" />
+                <Path d="M 0 0 L 10 5 L 0 10 z" fill="#333333" />
               </Marker>
             </Defs>
 
@@ -321,13 +341,16 @@ export default function TaskFlowchart({
               const ty = end.y;
               const tx = end.x + end.width / 2;
 
+              const midY = (sy + ty) / 2;
+
               return (
                 <Path
                   key={`edge-${i}`}
-                  d={`M ${sx} ${sy} C ${sx} ${(sy + ty) / 2}, ${tx} ${(sy + ty) / 2}, ${tx} ${ty}`}
-                  stroke="#A3B8B0"
+                  d={`M ${sx} ${sy} L ${sx} ${midY} L ${tx} ${midY} L ${tx} ${ty}`}
+                  stroke="#333333"
                   strokeWidth="2"
                   fill="none"
+                  markerStart="url(#dot)"
                   markerEnd="url(#arrow)"
                 />
               );
@@ -353,7 +376,7 @@ export default function TaskFlowchart({
                   <Text
                     style={[
                       styles.nodeLabel,
-                      { color: isDone ? '#1B6A53' : '#102D24' },
+                      { color: '#FFFFFF' },
                     ]}
                     numberOfLines={3}
                   >
@@ -564,36 +587,42 @@ const styles = StyleSheet.create({
   rectNode: {
     padding: 12,
     borderRadius: 16,
-    borderWidth: 2,
-    width: 150,
-    minHeight: 80,
+    borderWidth: 0,
+    width: 106,
+    height: 76,
     justifyContent: 'center',
     alignItems: 'center',
     backgroundColor: '#FFFFFF',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
+    shadowOpacity: 0.1,
     shadowRadius: 4,
     elevation: 2,
   },
   diamondWrapper: {
-    width: 130,
-    height: 130,
+    width: 110,
+    height: 110,
     justifyContent: 'center',
     alignItems: 'center',
   },
   diamond: {
-    width: 90,
-    height: 90,
-    borderWidth: 2.5,
+    width: 76,
+    height: 76,
+    borderWidth: 0,
     transform: [{ rotate: '45deg' }],
-    backgroundColor: '#FFFFFF',
+    backgroundColor: '#3B3E40',
     justifyContent: 'center',
     alignItems: 'center',
+    borderRadius: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   diamondContent: {
     transform: [{ rotate: '-45deg' }],
-    width: 100,
+    width: 86,
     justifyContent: 'center',
     alignItems: 'center',
   },

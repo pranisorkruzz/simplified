@@ -113,7 +113,7 @@ export default function SignupScreen() {
           },
         ]}
       >
-        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false} disabled={Platform.OS === 'web'}>
           <View style={{ flex: 1, justifyContent: 'center', gap: 18 }}>
             <LinearGradient
               colors={['#103B31', '#1C6A57', '#D7B989']}

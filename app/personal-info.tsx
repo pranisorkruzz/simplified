@@ -105,7 +105,7 @@ export default function PersonalInfoScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false}>
+          <TouchableWithoutFeedback onPress={Keyboard.dismiss} accessible={false} disabled={Platform.OS === 'web'}>
             <View>
               <View style={styles.avatarSection}>
                 <View style={styles.avatarOuter}>
