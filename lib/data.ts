@@ -1,4 +1,4 @@
-import { readBriefFromRecord } from '@/lib/briefs';
+import { EmailBrief, readBriefFromRecord } from '@/lib/briefs';
 import { isMissingColumnError, supabase } from '@/lib/supabase';
 import { BriefCardData, Chat, Task, TaskChatRecord, TaskRow } from '@/types/database';
 
@@ -266,5 +266,49 @@ export async function fetchTaskFeed(userId: string) {
   return {
     tasks,
     deadlineFeatureAvailable,
+  };
+}
+
+export async function updateBriefPayload(
+  userId: string,
+  briefChatId: string,
+  brief: EmailBrief,
+) {
+  const withPayload = await supabase
+    .from('chats')
+    .update({
+      brief_payload: brief,
+      message: brief.summary,
+    })
+    .eq('user_id', userId)
+    .eq('id', briefChatId)
+    .eq('role', 'assistant');
+
+  if (!withPayload.error) {
+    return {
+      error: null,
+      usedFallback: false,
+    };
+  }
+
+  if (!isMissingColumnError(withPayload.error, 'brief_payload')) {
+    return {
+      error: withPayload.error,
+      usedFallback: false,
+    };
+  }
+
+  const fallback = await supabase
+    .from('chats')
+    .update({
+      message: JSON.stringify(brief),
+    })
+    .eq('user_id', userId)
+    .eq('id', briefChatId)
+    .eq('role', 'assistant');
+
+  return {
+    error: fallback.error,
+    usedFallback: !fallback.error,
   };
 }

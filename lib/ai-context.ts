@@ -21,6 +21,8 @@ export type UserAiContext = {
   updatedAt: string;
 };
 
+const FOLLOW_UP_COUNT = 5;
+
 const STUDENT_QUESTIONS: FollowUpQuestion[] = [
   {
     id: 'student_focus',
@@ -124,19 +126,73 @@ export function getFollowUpQuestions(
   userType?: UserType | null,
   contextualQuestions?: FollowUpQuestion[],
 ) {
-  if (contextualQuestions && contextualQuestions.length > 0) {
-    return contextualQuestions;
+  const baseQuestions =
+    userType === 'student'
+      ? STUDENT_QUESTIONS
+      : userType === 'professional'
+        ? PROFESSIONAL_QUESTIONS
+        : GENERIC_QUESTIONS;
+
+  const sanitizedContextual = (contextualQuestions ?? [])
+    .map((question, index) => {
+      const prompt = question.question?.trim();
+      const options = (question.options ?? [])
+        .map((option) => option.trim())
+        .filter(Boolean)
+        .slice(0, 4);
+
+      if (!prompt || options.length === 0) {
+        return null;
+      }
+
+      return {
+        id: question.id?.trim() || `contextual_${index + 1}`,
+        question: prompt,
+        options,
+        otherLabel: question.otherLabel?.trim() || 'Other',
+      } satisfies FollowUpQuestion;
+    })
+    .filter((question): question is FollowUpQuestion => Boolean(question));
+
+  const combined = [...sanitizedContextual, ...baseQuestions];
+  const seen = new Set<string>();
+  const deduped: FollowUpQuestion[] = [];
+
+  for (const question of combined) {
+    const key = question.question.trim().toLowerCase();
+
+    if (!key || seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+    deduped.push(question);
+
+    if (deduped.length === FOLLOW_UP_COUNT) {
+      return deduped;
+    }
   }
 
-  if (userType === 'student') {
-    return STUDENT_QUESTIONS;
+  if (deduped.length < FOLLOW_UP_COUNT) {
+    const fallbackPool = [...GENERIC_QUESTIONS, ...STUDENT_QUESTIONS, ...PROFESSIONAL_QUESTIONS];
+
+    for (const question of fallbackPool) {
+      const key = question.question.trim().toLowerCase();
+
+      if (!key || seen.has(key)) {
+        continue;
+      }
+
+      seen.add(key);
+      deduped.push(question);
+
+      if (deduped.length === FOLLOW_UP_COUNT) {
+        break;
+      }
+    }
   }
 
-  if (userType === 'professional') {
-    return PROFESSIONAL_QUESTIONS;
-  }
-
-  return GENERIC_QUESTIONS;
+  return deduped.slice(0, FOLLOW_UP_COUNT);
 }
 
 export function buildUserAiContext(

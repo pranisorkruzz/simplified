@@ -1,12 +1,16 @@
 import {
   buildFallbackBrief,
   EmailBrief,
+  KanbanPlan,
+  KanbanSubtask,
+  parseKanbanPlan,
   parseBriefPayload,
   parseEmailBrief,
 } from '@/lib/briefs';
 import {
   buildAiContextPrompt,
   readUserAiContextFromMetadata,
+  UserAiContextResponse,
 } from '@/lib/ai-context';
 import {
   getSupabaseErrorMessage,
@@ -37,6 +41,82 @@ type GeminiErrorResponse = {
     message?: string;
   };
 };
+
+function sanitizeJsonBlock(raw: string): string {
+  const fenced = raw
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '')
+    .trim();
+
+  const start = fenced.indexOf('{');
+  const end = fenced.lastIndexOf('}');
+
+  if (start >= 0 && end > start) {
+    return fenced.slice(start, end + 1);
+  }
+
+  return fenced;
+}
+
+type KanbanGenerationArgs = {
+  sourceTask: string;
+  brief: EmailBrief;
+  responses: UserAiContextResponse[];
+};
+
+function buildFallbackKanbanPlan({
+  sourceTask,
+  brief,
+  responses,
+}: KanbanGenerationArgs): KanbanPlan {
+  const contextLine = responses
+    .slice(0, 2)
+    .map((response) => response.answer)
+    .filter(Boolean)
+    .join(' | ');
+
+  const fallbackSteps = [
+    `Clarify scope for ${brief.title}`,
+    ...brief.actionItems,
+    'Review dependencies and blockers',
+    'QA the final deliverable',
+  ].filter(Boolean);
+
+  const uniqueSteps = Array.from(
+    new Set(
+      fallbackSteps
+        .map((step) => step.trim())
+        .filter(Boolean)
+        .map((step) => (step.length > 110 ? `${step.slice(0, 107)}...` : step)),
+    ),
+  ).slice(0, 9);
+
+  const subtasks = uniqueSteps.map((title, index) => {
+    const id = `task_${index + 1}`;
+
+    return {
+      id,
+      title,
+      notes: index === 0 && contextLine ? `Context: ${contextLine}` : null,
+      column: index === 0 ? 'in_progress' : 'todo',
+      order: index === 0 ? 0 : index - 1,
+      dependencies:
+        index > 0 && index < uniqueSteps.length - 1 ? [`task_${index}`] : [],
+      completedAt: null,
+    } satisfies KanbanSubtask;
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    sourceTask: sourceTask.trim() || brief.title,
+    contextAnswers: responses.slice(0, 5).map((response) => ({
+      question: response.question,
+      answer: response.answer,
+    })),
+    subtasks,
+  };
+}
 
 type SupabaseFunctionErrorLike = {
   message?: string;
@@ -229,6 +309,111 @@ async function insertBriefRows(
   }
 
   return assistantChat;
+}
+
+export async function generateKanbanPlan({
+  sourceTask,
+  brief,
+  responses,
+}: KanbanGenerationArgs): Promise<KanbanPlan> {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
+
+  if (!apiKey) {
+    return buildFallbackKanbanPlan({ sourceTask, brief, responses });
+  }
+
+  const prompt = `You are generating a kanban flowchart for a mobile app.
+
+Reference date/time: ${new Date().toISOString()}
+
+Main user task: ${sourceTask}
+Brief title: ${brief.title}
+Brief summary: ${brief.summary}
+
+Original action items:
+${brief.actionItems.map((item, index) => `${index + 1}. ${item}`).join('\n')}
+
+Follow-up answers:
+${responses
+  .map((response, index) => `${index + 1}. ${response.question}: ${response.answer}`)
+  .join('\n')}
+
+Return STRICT JSON only in this exact shape:
+{
+  "generatedAt": "ISO 8601 datetime",
+  "sourceTask": "string",
+  "contextAnswers": [
+    { "question": "string", "answer": "string" }
+  ],
+  "subtasks": [
+    {
+      "id": "snake_case_id",
+      "title": "short atomic subtask title",
+      "notes": "optional 1 short sentence or null",
+      "column": "todo" | "in_progress" | "done",
+      "order": 0,
+      "dependencies": ["id_of_required_task"],
+      "completedAt": null
+    }
+  ]
+}
+
+Rules:
+- Generate 6 to 10 subtasks.
+- Make subtasks atomic and execution-ready.
+- Use dependencies to reflect real prerequisite order.
+- Keep almost all tasks in todo and at most 1 in in_progress.
+- Keep done empty unless explicitly implied as already completed.
+- "order" is the ordering inside each column, starting at 0.
+- Dependencies must reference valid IDs from subtasks.
+- Do not include markdown fences or any commentary.`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      const errorText = await response.text();
+
+      try {
+        const errorData = JSON.parse(errorText) as GeminiErrorResponse;
+        throw new Error(
+          errorData.error?.message || `Gemini API error (${response.status})`,
+        );
+      } catch {
+        throw new Error(errorText || `Gemini API error (${response.status})`);
+      }
+    }
+
+    const data = (await response.json()) as GeminiResponse;
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const parsed = parseKanbanPlan(
+      raw ? JSON.parse(sanitizeJsonBlock(raw)) : null,
+    );
+
+    if (parsed) {
+      return parsed;
+    }
+
+    return buildFallbackKanbanPlan({ sourceTask, brief, responses });
+  } catch {
+    return buildFallbackKanbanPlan({ sourceTask, brief, responses });
+  }
 }
 
 export async function createBriefFromEmail(

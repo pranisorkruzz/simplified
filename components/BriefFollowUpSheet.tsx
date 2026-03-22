@@ -52,6 +52,18 @@ function buildInitialState(
   }, {});
 }
 
+function isAnswerComplete(answer: AnswerState | undefined) {
+  if (!answer?.answerSource) {
+    return false;
+  }
+
+  if (answer.answerSource === 'other') {
+    return Boolean(answer.otherText.trim());
+  }
+
+  return Boolean(answer.answer.trim());
+}
+
 export default function BriefFollowUpSheet({
   visible,
   questions,
@@ -71,6 +83,7 @@ export default function BriefFollowUpSheet({
 }) {
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [sheetError, setSheetError] = useState('');
+  const [currentIndex, setCurrentIndex] = useState(0);
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
@@ -78,27 +91,29 @@ export default function BriefFollowUpSheet({
       return;
     }
 
-    setAnswers(buildInitialState(questions, initialContext));
+    const initialAnswers = buildInitialState(questions, initialContext);
+    const firstIncompleteIndex = questions.findIndex(
+      (question) => !isAnswerComplete(initialAnswers[question.id]),
+    );
+
+    setAnswers(initialAnswers);
+    setCurrentIndex(
+      firstIncompleteIndex >= 0
+        ? firstIncompleteIndex
+        : Math.max(questions.length - 1, 0),
+    );
     setSheetError('');
   }, [initialContext, questions, visible]);
 
   const headerName = firstName?.trim() || 'you';
-
-  const isComplete = useMemo(
+  const currentQuestion = questions[currentIndex];
+  const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
+  const currentIsComplete = isAnswerComplete(currentAnswer);
+  const totalQuestions = questions.length;
+  const isLastQuestion = currentIndex === totalQuestions - 1;
+  const answeredCount = useMemo(
     () =>
-      questions.every((question) => {
-        const answer = answers[question.id];
-
-        if (!answer?.answerSource) {
-          return false;
-        }
-
-        if (answer.answerSource === 'other') {
-          return Boolean(answer.otherText.trim());
-        }
-
-        return Boolean(answer.answer.trim());
-      }),
+      questions.filter((question) => isAnswerComplete(answers[question.id])).length,
     [answers, questions],
   );
 
@@ -143,11 +158,24 @@ export default function BriefFollowUpSheet({
     setSheetError('');
   };
 
-  const handleSave = async () => {
-    if (!isComplete) {
-      setSheetError(
-        `Answer all ${questions.length} questions before saving this context.`,
-      );
+  const handlePrimaryPress = async () => {
+    if (!currentQuestion) {
+      return;
+    }
+
+    if (!currentIsComplete) {
+      setSheetError('Please answer this question to continue.');
+      return;
+    }
+
+    if (!isLastQuestion) {
+      setCurrentIndex((prev) => prev + 1);
+      setSheetError('');
+      return;
+    }
+
+    if (answeredCount !== totalQuestions) {
+      setSheetError(`Answer all ${totalQuestions} questions before continuing.`);
       return;
     }
 
@@ -169,12 +197,18 @@ export default function BriefFollowUpSheet({
     await onSave(responses);
   };
 
+  if (!currentQuestion) {
+    return null;
+  }
+
+  const otherSelected = currentAnswer?.answerSource === 'other';
+
   return (
     <Modal
       visible={visible}
       transparent
       animationType="slide"
-      onRequestClose={() => {}}
+      onRequestClose={onClose}
     >
       <View style={styles.backdrop}>
         <KeyboardAvoidingView
@@ -190,10 +224,24 @@ export default function BriefFollowUpSheet({
             <View style={styles.header}>
               <View style={styles.headerCopy}>
                 <Text style={styles.eyebrow}>PERSONALIZE CLARIX</Text>
-                <Text style={styles.title}>A few follow-up questions</Text>
+                <Text style={styles.title}>5 follow-up questions</Text>
                 <Text style={styles.copy}>
-                  Answer these so Clarix can tailor future breakdowns around {headerName}.
+                  Quick context from {headerName} helps Clarix generate a smarter workflow.
                 </Text>
+              </View>
+            </View>
+
+            <View style={styles.progressWrap}>
+              <Text style={styles.progressText}>{`Question ${currentIndex + 1} of ${totalQuestions}`}</Text>
+              <View style={styles.progressTrack}>
+                <View
+                  style={[
+                    styles.progressFill,
+                    {
+                      width: `${((currentIndex + 1) / Math.max(totalQuestions, 1)) * 100}%`,
+                    },
+                  ]}
+                />
               </View>
             </View>
 
@@ -202,73 +250,67 @@ export default function BriefFollowUpSheet({
               contentContainerStyle={styles.scrollContent}
               showsVerticalScrollIndicator={false}
             >
-              {questions.map((question, index) => {
-                const answer = answers[question.id];
-                const otherSelected = answer?.answerSource === 'other';
+              <View style={styles.questionBlock}>
+                <Text style={styles.questionEyebrow}>{`QUESTION ${currentIndex + 1}`}</Text>
+                <Text style={styles.questionText}>{currentQuestion.question}</Text>
 
-                return (
-                  <View key={question.id} style={styles.questionBlock}>
-                    <Text style={styles.questionEyebrow}>{`QUESTION ${index + 1}`}</Text>
-                    <Text style={styles.questionText}>{question.question}</Text>
+                <View style={styles.optionWrap}>
+                  {currentQuestion.options.map((option) => {
+                    const selected =
+                      currentAnswer?.answerSource === 'option' &&
+                      currentAnswer.answer === option;
 
-                    <View style={styles.optionWrap}>
-                      {question.options.map((option) => {
-                        const selected =
-                          answer?.answerSource === 'option' && answer.answer === option;
-
-                        return (
-                          <TouchableOpacity
-                            key={option}
-                            style={[
-                              styles.optionChip,
-                              selected && styles.optionChipSelected,
-                            ]}
-                            onPress={() => selectOption(question.id, option)}
-                            activeOpacity={0.85}
-                          >
-                            <Text
-                              style={[
-                                styles.optionChipText,
-                                selected && styles.optionChipTextSelected,
-                              ]}
-                            >
-                              {option}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-
+                    return (
                       <TouchableOpacity
+                        key={option}
                         style={[
                           styles.optionChip,
-                          otherSelected && styles.optionChipSelected,
+                          selected && styles.optionChipSelected,
                         ]}
-                        onPress={() => selectOther(question.id)}
+                        onPress={() => selectOption(currentQuestion.id, option)}
                         activeOpacity={0.85}
                       >
                         <Text
                           style={[
                             styles.optionChipText,
-                            otherSelected && styles.optionChipTextSelected,
+                            selected && styles.optionChipTextSelected,
                           ]}
                         >
-                          {question.otherLabel}
+                          {option}
                         </Text>
                       </TouchableOpacity>
-                    </View>
+                    );
+                  })}
 
-                    {otherSelected ? (
-                      <TextInput
-                        style={styles.otherInput}
-                        value={answer.otherText}
-                        onChangeText={(text) => updateOtherText(question.id, text)}
-                        placeholder="Write your own answer"
-                        placeholderTextColor="#7B8A83"
-                      />
-                    ) : null}
-                  </View>
-                );
-              })}
+                  <TouchableOpacity
+                    style={[
+                      styles.optionChip,
+                      otherSelected && styles.optionChipSelected,
+                    ]}
+                    onPress={() => selectOther(currentQuestion.id)}
+                    activeOpacity={0.85}
+                  >
+                    <Text
+                      style={[
+                        styles.optionChipText,
+                        otherSelected && styles.optionChipTextSelected,
+                      ]}
+                    >
+                      {currentQuestion.otherLabel}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                {otherSelected ? (
+                  <TextInput
+                    style={styles.otherInput}
+                    value={currentAnswer?.otherText ?? ''}
+                    onChangeText={(text) => updateOtherText(currentQuestion.id, text)}
+                    placeholder="Write your own answer"
+                    placeholderTextColor="#7B8A83"
+                  />
+                ) : null}
+              </View>
 
               {sheetError ? (
                 <View style={styles.errorBanner}>
@@ -280,17 +322,31 @@ export default function BriefFollowUpSheet({
             <View style={styles.actions}>
               <TouchableOpacity
                 style={[
-                  styles.primaryButton,
-                  (!isComplete || saving) && styles.primaryButtonDisabled,
+                  styles.secondaryButton,
+                  currentIndex === 0 && styles.secondaryButtonDisabled,
                 ]}
-                onPress={() => void handleSave()}
+                onPress={() => setCurrentIndex((prev) => Math.max(prev - 1, 0))}
                 activeOpacity={0.85}
-                disabled={!isComplete || saving}
+                disabled={currentIndex === 0 || saving}
+              >
+                <Text style={styles.secondaryButtonText}>Back</Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                style={[
+                  styles.primaryButton,
+                  (!currentIsComplete || saving) && styles.primaryButtonDisabled,
+                ]}
+                onPress={() => void handlePrimaryPress()}
+                activeOpacity={0.85}
+                disabled={!currentIsComplete || saving}
               >
                 {saving ? (
                   <ActivityIndicator size="small" color="#F7F3EA" />
                 ) : (
-                  <Text style={styles.primaryButtonText}>Save Context</Text>
+                  <Text style={styles.primaryButtonText}>
+                    {isLastQuestion ? 'Generate Kanban' : 'Continue'}
+                  </Text>
                 )}
               </TouchableOpacity>
             </View>
@@ -332,8 +388,7 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 30,
     paddingHorizontal: 20,
     paddingTop: 18,
-    // paddingBottom handled via inline styles
-    height: '80%',
+    height: '76%',
     width: '100%',
   },
   header: {
@@ -363,24 +418,38 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 21,
   },
-  closeButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: '#F2ECE1',
-    alignItems: 'center',
-    justifyContent: 'center',
+  progressWrap: {
+    marginTop: 16,
+    gap: 8,
+  },
+  progressText: {
+    color: '#3F5A51',
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  progressTrack: {
+    height: 7,
+    borderRadius: 999,
+    backgroundColor: '#E7DED0',
+    overflow: 'hidden',
+  },
+  progressFill: {
+    height: '100%',
+    borderRadius: 999,
+    backgroundColor: '#1B5A49',
   },
   scrollArea: {
-    marginTop: 18,
+    marginTop: 16,
     flex: 1,
   },
   scrollContent: {
-    gap: 18,
+    gap: 16,
     paddingBottom: 8,
   },
   questionBlock: {
-    gap: 10,
+    gap: 12,
   },
   questionEyebrow: {
     color: '#799188',
@@ -390,14 +459,15 @@ const styles = StyleSheet.create({
   },
   questionText: {
     color: '#102D24',
-    fontSize: 18,
-    fontWeight: '700',
-    lineHeight: 24,
+    fontSize: 24,
+    fontFamily: DISPLAY_FONT,
+    lineHeight: 30,
   },
   optionWrap: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
+    marginTop: 2,
   },
   optionChip: {
     borderRadius: 999,
@@ -426,6 +496,7 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     fontSize: 14,
     color: '#102D24',
+    marginTop: 2,
   },
   errorBanner: {
     backgroundColor: '#FFE2DC',
@@ -443,12 +514,15 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   secondaryButton: {
-    flex: 1,
+    flex: 0.7,
     minHeight: 52,
     borderRadius: 18,
     backgroundColor: '#E8E1D6',
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  secondaryButtonDisabled: {
+    opacity: 0.45,
   },
   secondaryButtonText: {
     color: '#163D32',

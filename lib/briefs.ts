@@ -1,4 +1,25 @@
 export type EmailBriefPriority = 'high' | 'medium' | 'low';
+export type KanbanColumnId = 'todo' | 'in_progress' | 'done';
+
+export interface KanbanSubtask {
+  id: string;
+  title: string;
+  notes: string | null;
+  column: KanbanColumnId;
+  order: number;
+  dependencies: string[];
+  completedAt: string | null;
+}
+
+export interface KanbanPlan {
+  generatedAt: string;
+  sourceTask: string;
+  contextAnswers: {
+    question: string;
+    answer: string;
+  }[];
+  subtasks: KanbanSubtask[];
+}
 
 export interface EmailBrief {
   title: string;
@@ -13,6 +34,7 @@ export interface EmailBrief {
     options: string[];
     otherLabel: string;
   }[];
+  kanbanPlan?: KanbanPlan;
 }
 
 type BriefRecord = {
@@ -20,9 +42,138 @@ type BriefRecord = {
   message?: string | null;
 };
 
+function normalizeKanbanSubtask(
+  subtask: unknown,
+  index: number,
+): KanbanSubtask | null {
+  if (!subtask || typeof subtask !== 'object') {
+    return null;
+  }
+
+  const typed = subtask as Partial<KanbanSubtask>;
+  const title =
+    typeof typed.title === 'string' ? typed.title.trim().slice(0, 120) : '';
+
+  if (!title) {
+    return null;
+  }
+
+  const id =
+    typeof typed.id === 'string' && typed.id.trim()
+      ? typed.id.trim()
+      : `subtask_${index + 1}`;
+
+  const column: KanbanColumnId =
+    typed.column === 'in_progress' || typed.column === 'done'
+      ? typed.column
+      : 'todo';
+
+  const dependencies = Array.isArray(typed.dependencies)
+    ? typed.dependencies
+        .filter((dep): dep is string => typeof dep === 'string')
+        .map((dep) => dep.trim())
+        .filter(Boolean)
+    : [];
+
+  const completedAt =
+    typeof typed.completedAt === 'string' &&
+    !Number.isNaN(Date.parse(typed.completedAt))
+      ? new Date(typed.completedAt).toISOString()
+      : null;
+
+  return {
+    id,
+    title,
+    notes:
+      typeof typed.notes === 'string' && typed.notes.trim()
+        ? typed.notes.trim().slice(0, 240)
+        : null,
+    column,
+    order:
+      typeof typed.order === 'number' && Number.isFinite(typed.order)
+        ? typed.order
+        : index,
+    dependencies,
+    completedAt,
+  };
+}
+
+export function parseKanbanPlan(value: unknown): KanbanPlan | null {
+  if (!value || typeof value !== 'object') {
+    return null;
+  }
+
+  const typed = value as Partial<KanbanPlan>;
+  const sourceTask =
+    typeof typed.sourceTask === 'string' ? typed.sourceTask.trim() : '';
+
+  if (!sourceTask) {
+    return null;
+  }
+
+  const contextAnswers = Array.isArray(typed.contextAnswers)
+    ? typed.contextAnswers
+        .map((entry) => {
+          if (!entry || typeof entry !== 'object') {
+            return null;
+          }
+
+          const typedEntry = entry as {
+            question?: unknown;
+            answer?: unknown;
+          };
+          const question =
+            typeof typedEntry.question === 'string'
+              ? typedEntry.question.trim()
+              : '';
+          const answer =
+            typeof typedEntry.answer === 'string'
+              ? typedEntry.answer.trim()
+              : '';
+
+          if (!question || !answer) {
+            return null;
+          }
+
+          return { question, answer };
+        })
+        .filter((entry): entry is { question: string; answer: string } =>
+          Boolean(entry),
+        )
+        .slice(0, 5)
+    : [];
+
+  const subtasks = Array.isArray(typed.subtasks)
+    ? typed.subtasks
+        .map((subtask, index) => normalizeKanbanSubtask(subtask, index))
+        .filter((subtask): subtask is KanbanSubtask => Boolean(subtask))
+    : [];
+
+  if (subtasks.length === 0) {
+    return null;
+  }
+
+  const subtaskIds = new Set(subtasks.map((task) => task.id));
+  const normalizedSubtasks = subtasks.map((task) => ({
+    ...task,
+    dependencies: task.dependencies.filter((dep) => subtaskIds.has(dep)),
+  }));
+
+  return {
+    generatedAt:
+      typeof typed.generatedAt === 'string' &&
+      !Number.isNaN(Date.parse(typed.generatedAt))
+        ? new Date(typed.generatedAt).toISOString()
+        : new Date().toISOString(),
+    sourceTask,
+    contextAnswers,
+    subtasks: normalizedSubtasks,
+  };
+}
+
 function detectTimeLabel(text: string): string {
   const match = text.match(
-    /\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s?(?:AM|PM|am|pm)|\d{1,2}(?::\d{2})?)\b/
+    /\b(?:at\s+)?(\d{1,2}(?::\d{2})?\s?(?:AM|PM|am|pm)|\d{1,2}(?::\d{2})?)\b/,
   );
 
   return match ? match[1].replace(/\s+/g, ' ').trim() : 'No set time';
@@ -98,7 +249,7 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
     : [];
 
   const suggestedFollowUpQuestions = Array.isArray(
-    parsed.suggestedFollowUpQuestions
+    parsed.suggestedFollowUpQuestions,
   )
     ? parsed.suggestedFollowUpQuestions
         .map((q) => {
@@ -121,8 +272,9 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
           };
         })
         .filter((q): q is NonNullable<typeof q> => Boolean(q))
-        .slice(0, 3)
+        .slice(0, 5)
     : [];
+  const kanbanPlan = parseKanbanPlan(parsed.kanbanPlan);
 
   if (!title || !summary) {
     return null;
@@ -146,13 +298,14 @@ function normalizeEmailBrief(parsed: Partial<EmailBrief>): EmailBrief | null {
       suggestedFollowUpQuestions.length > 0
         ? suggestedFollowUpQuestions
         : undefined,
+    kanbanPlan: kanbanPlan ?? undefined,
   };
 }
 
 export function parseEmailBrief(raw: string): EmailBrief | null {
   try {
     return normalizeEmailBrief(
-      JSON.parse(sanitizeJsonBlock(raw)) as Partial<EmailBrief>
+      JSON.parse(sanitizeJsonBlock(raw)) as Partial<EmailBrief>,
     );
   } catch {
     return null;
