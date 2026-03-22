@@ -346,27 +346,34 @@ Return STRICT JSON only in this exact shape:
   "contextAnswers": [
     { "question": "string", "answer": "string" }
   ],
-  "subtasks": [
+  "nodes": [
     {
       "id": "snake_case_id",
       "title": "short atomic subtask title",
       "notes": "optional 1 short sentence or null",
+      "type": "step" | "decision",
       "column": "todo" | "in_progress" | "done",
       "order": 0,
-      "dependencies": ["id_of_required_task"],
       "completedAt": null
     }
+  ],
+  "edges": [
+    { "from": "id_of_source_node", "to": "id_of_target_node" }
   ]
 }
 
 Rules:
-- Generate 6 to 10 subtasks.
+- Generate 7 to 12 nodes.
+- "nodes" are the tasks/steps.
+- "type" must be "step" for regular actions or "decision" for choices/splits.
+- "edges" define the flow between nodes.
+- Every node except the first one should have at least one incoming edge.
+- The flow must have a logical start and end.
+- Decisions (diamonds) should lead to at least two different paths or a confirmation step.
 - Make subtasks atomic and execution-ready.
-- Use dependencies to reflect real prerequisite order.
 - Keep almost all tasks in todo and at most 1 in in_progress.
 - Keep done empty unless explicitly implied as already completed.
-- "order" is the ordering inside each column, starting at 0.
-- Dependencies must reference valid IDs from subtasks.
+- "order" is the vertical/logical sequence, starting at 0.
 - Do not include markdown fences or any commentary.`;
 
   try {
@@ -383,6 +390,10 @@ Rules:
               parts: [{ text: prompt }],
             },
           ],
+          generationConfig: {
+            temperature: 0.2,
+            responseMimeType: "application/json",
+          },
         }),
       },
     );

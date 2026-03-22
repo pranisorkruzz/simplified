@@ -9,6 +9,13 @@ export interface KanbanSubtask {
   order: number;
   dependencies: string[];
   completedAt: string | null;
+  // Flowchart specific
+  type?: 'step' | 'decision';
+}
+
+export interface FlowchartEdge {
+  from: string;
+  to: string;
 }
 
 export interface KanbanPlan {
@@ -19,6 +26,9 @@ export interface KanbanPlan {
     answer: string;
   }[];
   subtasks: KanbanSubtask[];
+  // New flowchart fields
+  nodes?: KanbanSubtask[];
+  edges?: FlowchartEdge[];
 }
 
 export interface EmailBrief {
@@ -95,6 +105,7 @@ function normalizeKanbanSubtask(
         : index,
     dependencies,
     completedAt,
+    type: typed.type === 'decision' ? 'decision' : 'step',
   };
 }
 
@@ -149,15 +160,36 @@ export function parseKanbanPlan(value: unknown): KanbanPlan | null {
         .filter((subtask): subtask is KanbanSubtask => Boolean(subtask))
     : [];
 
-  if (subtasks.length === 0) {
-    return null;
-  }
-
   const subtaskIds = new Set(subtasks.map((task) => task.id));
   const normalizedSubtasks = subtasks.map((task) => ({
     ...task,
     dependencies: task.dependencies.filter((dep) => subtaskIds.has(dep)),
   }));
+
+  const nodes = Array.isArray(typed.nodes)
+    ? typed.nodes
+        .map((node, index) => normalizeKanbanSubtask(node, index))
+        .filter((node): node is KanbanSubtask => Boolean(node))
+    : [];
+
+  const edges = Array.isArray(typed.edges)
+    ? typed.edges
+        .map((edge) => {
+          if (!edge || typeof edge !== 'object') return null;
+          const typedEdge = edge as Partial<FlowchartEdge>;
+          if (
+            typeof typedEdge.from === 'string' &&
+            typeof typedEdge.to === 'string'
+          ) {
+            return {
+              from: typedEdge.from,
+              to: typedEdge.to,
+            } satisfies FlowchartEdge;
+          }
+          return null;
+        })
+        .filter((edge): edge is FlowchartEdge => Boolean(edge))
+    : [];
 
   return {
     generatedAt:
@@ -168,6 +200,8 @@ export function parseKanbanPlan(value: unknown): KanbanPlan | null {
     sourceTask,
     contextAnswers,
     subtasks: normalizedSubtasks,
+    nodes: nodes.length > 0 ? nodes : normalizedSubtasks,
+    edges,
   };
 }
 

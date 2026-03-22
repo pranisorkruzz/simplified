@@ -23,7 +23,6 @@ import { useKanban } from '@/contexts/KanbanContext';
 import { fetchTaskFeed, updateBriefPayload } from '@/lib/data';
 import type { EmailBrief, KanbanPlan } from '@/lib/briefs';
 import { getSupabaseErrorMessage, supabase } from '@/lib/supabase';
-import TaskCard from '@/components/TaskCard';
 import TaskFlowchart from '@/components/TaskFlowchart';
 import { TaskRow } from '@/types/database';
 
@@ -408,19 +407,7 @@ export default function TasksScreen() {
                   Add a brief from the Briefs tab and it will appear here.
                 </Text>
               </View>
-            ) : (
-              // Hide cards if flowchart is shown for the current filter
-              !(activeBrief?.kanbanPlan && selectedActiveFilter === activeBriefId) &&
-              filteredActiveTasks.map((task, index) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  index={index}
-                  onToggle={toggleTask}
-                  onDelete={deleteTask}
-                />
-              ))
-            )}
+            ) : null}
 
 
           </>
