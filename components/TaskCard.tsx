@@ -9,18 +9,11 @@ import {
 } from 'react-native';
 import {
   CheckCheck,
-  Pencil,
   RotateCcw,
   Trash2,
 } from 'lucide-react-native';
 import { TaskRow } from '@/types/database';
-import {
-  getPriorityColors,
-  getDeadlineTone,
-  formatTimeLeft,
-  formatCreatedLabel,
-  formatDateLabel,
-} from '@/utils/formatters';
+
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -33,19 +26,13 @@ export default function TaskCard({
   index,
   onToggle,
   onDelete,
-  onEditDeadline,
 }: {
   task: TaskRow;
   index: number;
   onToggle: (task: TaskRow) => Promise<void>;
   onDelete: (task: TaskRow) => Promise<void>;
-  onEditDeadline: (task: TaskRow) => void;
 }) {
   const entrance = useRef(new Animated.Value(0)).current;
-  const priorityColors = getPriorityColors(task.brief?.priority);
-  const deadlineTone = getDeadlineTone(task.deadline_at);
-  const hasDeadline = Boolean(task.deadline_at);
-  const hasPriority = Boolean(task.brief?.priority);
 
   useEffect(() => {
     Animated.timing(entrance, {
@@ -76,35 +63,7 @@ export default function TaskCard({
     >
       <View style={styles.taskTopRow}>
         <View style={styles.taskMetaRow}>
-          {hasDeadline ? (
-            <View
-              style={[
-                styles.deadlinePill,
-                { backgroundColor: deadlineTone.background },
-              ]}
-            >
-              <Text
-                style={[
-                  styles.deadlinePillText,
-                  { color: deadlineTone.text },
-                ]}
-              >
-                {formatTimeLeft(task.deadline_at!)}
-              </Text>
-            </View>
-          ) : null}
-          {hasPriority ? (
-            <View
-              style={[
-                styles.priorityPill,
-                { backgroundColor: priorityColors.background },
-              ]}
-            >
-              <Text style={[styles.priorityText, { color: priorityColors.text }]}>
-                {task.brief!.priority.toUpperCase()}
-              </Text>
-            </View>
-          ) : null}
+          {/* Priority/Deadline features removed per request */}
         </View>
 
         <TouchableOpacity
@@ -119,48 +78,7 @@ export default function TaskCard({
         {task.title}
       </Text>
 
-      {task.brief?.title && (
-        <View style={styles.sourceMetaRow}>
-          <Text
-            style={[
-              styles.sourceMetaBrief,
-              task.completed && styles.finishedBody,
-            ]}
-            numberOfLines={1}
-          >
-            {task.brief.title}
-          </Text>
-        </View>
-      )}
-
-      <Text style={[styles.taskSummary, task.completed && styles.finishedBody]}>
-        {task.brief?.summary || 'Task captured from your email brief.'}
-      </Text>
-
-      <View style={styles.infoGrid}>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>Created</Text>
-          <Text style={styles.infoValue}>{formatCreatedLabel(task.created_at)}</Text>
-        </View>
-        <View style={styles.infoCard}>
-          <Text style={styles.infoLabel}>Deadline</Text>
-          <Text style={styles.infoValue}>
-            {task.deadline_at ? formatDateLabel(task.deadline_at) : 'Not set'}
-          </Text>
-        </View>
-      </View>
-
       <View style={styles.cardActionsRow}>
-        <TouchableOpacity
-          style={styles.deadlineButton}
-          onPress={() => onEditDeadline(task)}
-        >
-          <Pencil size={15} color="#163D32" />
-          <Text style={styles.deadlineButtonText}>
-            {task.deadline_at ? 'Edit Deadline' : 'Add Deadline'}
-          </Text>
-        </TouchableOpacity>
-
         <TouchableOpacity
           style={[
             styles.toggleButton,
@@ -214,25 +132,7 @@ const styles = StyleSheet.create({
     flexWrap: 'wrap',
     flex: 1,
   },
-  deadlinePill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  deadlinePillText: {
-    fontSize: 12,
-    fontWeight: '800',
-  },
-  priorityPill: {
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  priorityText: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.9,
-  },
+
   deleteButton: {
     width: 36,
     height: 36,
@@ -251,79 +151,13 @@ const styles = StyleSheet.create({
   finishedTitle: {
     color: '#476158',
   },
-  sourceMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 14,
-  },
-  sourceMetaLabel: {
-    color: '#0F4737',
-    fontSize: 12,
-    fontWeight: '800',
-    letterSpacing: 0.4,
-  },
-  sourceMetaBrief: {
-    flexShrink: 1,
-    color: '#52635B',
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  taskSummary: {
-    color: '#4E5F57',
-    fontSize: 15,
-    lineHeight: 24,
-    marginTop: 10,
-  },
-  finishedBody: {
-    color: '#677A72',
-  },
-  infoGrid: {
-    flexDirection: 'row',
-    gap: 10,
-    marginTop: 18,
-  },
-  infoCard: {
-    flex: 1,
-    backgroundColor: '#F2ECE1',
-    borderRadius: 18,
-    padding: 14,
-  },
-  infoLabel: {
-    color: '#52635B',
-    fontSize: 11,
-    fontWeight: '700',
-    letterSpacing: 0.6,
-    textTransform: 'uppercase',
-  },
-  infoValue: {
-    color: '#163D32',
-    fontSize: 13,
-    fontWeight: '700',
-    lineHeight: 18,
-    marginTop: 6,
-  },
+
   cardActionsRow: {
     flexDirection: 'row',
     gap: 10,
     marginTop: 18,
   },
-  deadlineButton: {
-    flex: 1,
-    minHeight: 52,
-    borderRadius: 18,
-    backgroundColor: '#DCE9E2',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  deadlineButtonText: {
-    color: '#163D32',
-    fontSize: 13,
-    fontWeight: '700',
-  },
+
   toggleButton: {
     flex: 1.2,
     minHeight: 52,

@@ -25,10 +25,9 @@ import { fetchTaskFeed, updateBriefPayload } from '@/lib/data';
 import type { EmailBrief, KanbanPlan } from '@/lib/briefs';
 import { getSupabaseErrorMessage, supabase } from '@/lib/supabase';
 import TaskCard from '@/components/TaskCard';
-import DeadlineModal from '@/components/DeadlineModal';
 import TaskFlowchart from '@/components/TaskFlowchart';
 import { TaskRow } from '@/types/database';
-import { formatDeadlineInputValue, parseManualDeadlineInput } from '@/utils/formatters';
+
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -43,7 +42,6 @@ if (
   UIManager.setLayoutAnimationEnabledExperimental(true);
 }
 
-const ALL_ACTIVE_FILTER = 'all';
 const UNGROUPED_ACTIVE_FILTER = 'ungrouped';
 
 function getBriefFilterLabel(task: TaskRow) {
@@ -63,25 +61,15 @@ export default function TasksScreen() {
   const [tasks, setTasks] = useState<TaskRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-  const [deadlineTask, setDeadlineTask] = useState<TaskRow | null>(null);
-  const [deadlineInput, setDeadlineInput] = useState('');
-  const [deadlineError, setDeadlineError] = useState('');
   const [screenError, setScreenError] = useState('');
-  const [deadlineFeatureAvailable, setDeadlineFeatureAvailable] = useState(true);
-  const [savingDeadline, setSavingDeadline] = useState(false);
-  const [selectedActiveFilter, setSelectedActiveFilter] = useState(ALL_ACTIVE_FILTER);
+  const [selectedActiveFilter, setSelectedActiveFilter] = useState<string | null>(activeBriefId);
   const [savingKanban, setSavingKanban] = useState(false);
 
   const applyTaskFeed = useCallback((
     feed: Awaited<ReturnType<typeof fetchTaskFeed>>,
   ) => {
     setTasks(feed.tasks);
-    setDeadlineFeatureAvailable(feed.deadlineFeatureAvailable);
-    setScreenError(
-      !feed.deadlineFeatureAvailable
-        ? 'Deadline storage is unavailable until the latest Supabase migration is applied.'
-        : '',
-    );
+    setScreenError('');
   }, []);
 
   const loadTasks = useCallback(async (
@@ -164,89 +152,43 @@ export default function TasksScreen() {
     }
   };
 
-  const openDeadlineEditor = (task: TaskRow) => {
-    if (!deadlineFeatureAvailable) {
-      Alert.alert(
-        'Deadline unavailable',
-        'Run the latest Supabase migration to enable deadline storage for tasks.'
+  const deleteCategoryTasks = async (groupId: string) => {
+    if (groupId === UNGROUPED_ACTIVE_FILTER) return;
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    try {
+      const { error } = await supabase.from('tasks').delete().eq('chat_id', groupId);
+      if (error) throw error;
+      setTasks((prev) => prev.filter((item) => item.chat_id !== groupId));
+      setScreenError('');
+      await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    } catch (error) {
+      setScreenError(getSupabaseErrorMessage(error, 'Failed to delete category tasks'));
+    }
+  };
+
+  const completeCategoryTasks = async (groupId: string) => {
+    if (groupId === UNGROUPED_ACTIVE_FILTER) return;
+
+    LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
+    try {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ completed: true })
+        .eq('chat_id', groupId);
+
+      if (error) throw error;
+
+      setTasks((prev) =>
+        prev.map((item) =>
+          item.chat_id === groupId ? { ...item, completed: true } : item,
+        ),
       );
-      return;
+      setScreenError('');
+      await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (error) {
+      setScreenError(getSupabaseErrorMessage(error, 'Failed to complete tasks'));
     }
-
-    setDeadlineTask(task);
-    setDeadlineInput(formatDeadlineInputValue(task.deadline_at));
-    setDeadlineError('');
-  };
-
-  const closeDeadlineEditor = () => {
-    setDeadlineTask(null);
-    setDeadlineInput('');
-    setDeadlineError('');
-    setSavingDeadline(false);
-  };
-
-  const saveDeadline = async () => {
-    if (!deadlineTask) {
-      return;
-    }
-
-    const parsedDeadline = parseManualDeadlineInput(deadlineInput);
-
-    if (deadlineInput.trim() && !parsedDeadline) {
-      setDeadlineError('Use YYYY-MM-DD or YYYY-MM-DD HH:mm');
-      return;
-    }
-
-    setSavingDeadline(true);
-    setDeadlineError('');
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ deadline_at: parsedDeadline })
-      .eq('id', deadlineTask.id);
-
-    if (error) {
-      setDeadlineError(getSupabaseErrorMessage(error, 'Failed to save deadline'));
-      setSavingDeadline(false);
-      return;
-    }
-
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === deadlineTask.id ? { ...task, deadline_at: parsedDeadline } : task,
-      ),
-    );
-    setScreenError('');
-    await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    closeDeadlineEditor();
-  };
-
-  const clearDeadline = async () => {
-    if (!deadlineTask) {
-      return;
-    }
-
-    setSavingDeadline(true);
-
-    const { error } = await supabase
-      .from('tasks')
-      .update({ deadline_at: null })
-      .eq('id', deadlineTask.id);
-
-    if (error) {
-      setDeadlineError(getSupabaseErrorMessage(error, 'Failed to clear deadline'));
-      setSavingDeadline(false);
-      return;
-    }
-
-    setTasks((prev) =>
-      prev.map((task) =>
-        task.id === deadlineTask.id ? { ...task, deadline_at: null } : task,
-      ),
-    );
-    setScreenError('');
-    await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    closeDeadlineEditor();
   };
 
   const persistBriefKanban = async (
@@ -303,32 +245,48 @@ export default function TasksScreen() {
         id: groupId,
         label: getBriefFilterLabel(task),
         count: 1,
+        brief: task.brief,
       });
       return groups;
-    }, new Map<string, { id: string; label: string; count: number }>()),
+    }, new Map<string, { id: string; label: string; count: number; brief: EmailBrief | null }>()),
     ([, group]) => group,
   );
-  const filteredActiveTasks =
-    selectedActiveFilter === ALL_ACTIVE_FILTER
-      ? activeTasks
-      : activeTasks.filter(
-          (task) =>
-            (task.chat_id ?? UNGROUPED_ACTIVE_FILTER) === selectedActiveFilter,
-        );
+  const filteredActiveTasks = activeTasks.filter(
+    (task) =>
+      (task.chat_id ?? UNGROUPED_ACTIVE_FILTER) === selectedActiveFilter,
+  );
 
   useEffect(() => {
-    if (selectedActiveFilter === ALL_ACTIVE_FILTER) {
+    if (!selectedActiveFilter && activeTaskGroups.length > 0) {
+      const first = activeTaskGroups[0];
+      setSelectedActiveFilter(first.id);
+      if (first.brief) {
+        setActiveBrief(first.id, first.brief);
+      }
       return;
     }
 
-    const stillExists = activeTaskGroups.some(
+    if (!selectedActiveFilter) {
+      return;
+    }
+
+    const currentGroup = activeTaskGroups.find(
       (group) => group.id === selectedActiveFilter,
     );
 
-    if (!stillExists) {
-      setSelectedActiveFilter(ALL_ACTIVE_FILTER);
+    if (!currentGroup) {
+      // If the selected category is gone, pick the first overall
+      if (activeTaskGroups.length > 0) {
+        const first = activeTaskGroups[0];
+        setSelectedActiveFilter(first.id);
+        if (first.brief) {
+          setActiveBrief(first.id, first.brief);
+        }
+      } else {
+        setSelectedActiveFilter(null);
+      }
     }
-  }, [activeTaskGroups, selectedActiveFilter]);
+  }, [activeTaskGroups, selectedActiveFilter, setActiveBrief]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -356,21 +314,7 @@ export default function TasksScreen() {
           </View>
         ) : null}
 
-        {isGenerating ? (
-          <View style={styles.kanbanLoadingCard}>
-            <ActivityIndicator size="small" color="#0F4737" />
-            <Text style={styles.kanbanLoadingTitle}>Building your execution board</Text>
-            <Text style={styles.kanbanLoadingCopy}>
-              Clarix is generating your Kanban flowchart — it will appear here in a moment.
-            </Text>
-          </View>
-        ) : activeBrief?.kanbanPlan ? (
-          <TaskFlowchart
-            plan={activeBrief.kanbanPlan}
-            saving={savingKanban}
-            onPlanChange={handleKanbanPlanChange}
-          />
-        ) : null}
+
 
         {loading ? (
           <View style={styles.emptyCard}>
@@ -383,53 +327,15 @@ export default function TasksScreen() {
               <Text style={styles.sectionTitle}>Active</Text>
               <View style={styles.sectionBadge}>
                 <Sparkles size={14} color="#0F4737" />
-                <Text style={styles.sectionBadgeText}>{activeTasks.length}</Text>
+                <Text style={styles.sectionBadgeText}>{filteredActiveTasks.length}</Text>
               </View>
             </View>
-
-            {activeTasks.length > 0 ? (
+            {activeTaskGroups.length > 0 ? (
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
                 contentContainerStyle={styles.filterRow}
               >
-                <TouchableOpacity
-                  style={[
-                    styles.filterChip,
-                    selectedActiveFilter === ALL_ACTIVE_FILTER &&
-                      styles.filterChipActive,
-                  ]}
-                  onPress={() => setSelectedActiveFilter(ALL_ACTIVE_FILTER)}
-                  activeOpacity={0.85}
-                >
-                  <Text
-                    style={[
-                      styles.filterChipText,
-                      selectedActiveFilter === ALL_ACTIVE_FILTER &&
-                        styles.filterChipTextActive,
-                    ]}
-                  >
-                    All
-                  </Text>
-                  <View
-                    style={[
-                      styles.filterCount,
-                      selectedActiveFilter === ALL_ACTIVE_FILTER &&
-                        styles.filterCountActive,
-                    ]}
-                  >
-                    <Text
-                      style={[
-                        styles.filterCountText,
-                        selectedActiveFilter === ALL_ACTIVE_FILTER &&
-                          styles.filterCountTextActive,
-                      ]}
-                    >
-                      {activeTasks.length}
-                    </Text>
-                  </View>
-                </TouchableOpacity>
-
                 {activeTaskGroups.map((group) => {
                   const isSelected = selectedActiveFilter === group.id;
 
@@ -440,7 +346,12 @@ export default function TasksScreen() {
                         styles.filterChip,
                         isSelected && styles.filterChipActive,
                       ]}
-                      onPress={() => setSelectedActiveFilter(group.id)}
+                      onPress={() => {
+                        setSelectedActiveFilter(group.id);
+                        if (group.brief) {
+                          setActiveBrief(group.id, group.brief);
+                        }
+                      }}
                       activeOpacity={0.85}
                     >
                       <Text
@@ -472,6 +383,26 @@ export default function TasksScreen() {
               </ScrollView>
             ) : null}
 
+            {isGenerating && selectedActiveFilter === activeBriefId ? (
+              <View style={styles.kanbanLoadingCard}>
+                <ActivityIndicator size="small" color="#0F4737" />
+                <Text style={styles.kanbanLoadingTitle}>Building your execution board</Text>
+                <Text style={styles.kanbanLoadingCopy}>
+                  Clarix is generating your Kanban flowchart — it will appear here in a moment.
+                </Text>
+              </View>
+            ) : activeBrief?.kanbanPlan && selectedActiveFilter === activeBriefId ? (
+          <TaskFlowchart
+            plan={activeBrief.kanbanPlan}
+            saving={savingKanban}
+            onPlanChange={handleKanbanPlanChange}
+            title={activeTaskGroups.find(g => g.id === selectedActiveFilter)?.label}
+            onDelete={() => selectedActiveFilter && deleteCategoryTasks(selectedActiveFilter)}
+            onComplete={() => selectedActiveFilter && completeCategoryTasks(selectedActiveFilter)}
+            onEdit={() => Alert.alert('Edit', 'Flowchart editing coming soon')}
+          />
+        ) : null}
+
             {activeTasks.length === 0 ? (
               <View style={styles.emptyCard}>
                 <Text style={styles.emptyTitle}>No active tasks</Text>
@@ -480,6 +411,8 @@ export default function TasksScreen() {
                 </Text>
               </View>
             ) : (
+              // Hide cards if flowchart is shown for the current filter
+              !(activeBrief?.kanbanPlan && selectedActiveFilter === activeBriefId) &&
               filteredActiveTasks.map((task, index) => (
                 <TaskCard
                   key={task.id}
@@ -487,7 +420,6 @@ export default function TasksScreen() {
                   index={index}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
-                  onEditDeadline={openDeadlineEditor}
                 />
               ))
             )}
@@ -515,24 +447,12 @@ export default function TasksScreen() {
                   index={index}
                   onToggle={toggleTask}
                   onDelete={deleteTask}
-                  onEditDeadline={openDeadlineEditor}
                 />
               ))
             )}
           </>
         )}
       </ScrollView>
-
-      <DeadlineModal
-        visible={Boolean(deadlineTask)}
-        deadlineInput={deadlineInput}
-        setDeadlineInput={setDeadlineInput}
-        deadlineError={deadlineError}
-        savingDeadline={savingDeadline}
-        onClose={closeDeadlineEditor}
-        onClear={() => void clearDeadline()}
-        onSave={() => void saveDeadline()}
-      />
     </SafeAreaView>
   );
 }

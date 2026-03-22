@@ -10,7 +10,7 @@ import {
   View,
 } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
-import { CheckCheck, Circle } from 'lucide-react-native';
+import { CheckCheck, Circle, Pencil, Trash2 } from 'lucide-react-native';
 import { KanbanPlan, KanbanSubtask } from '@/lib/briefs';
 
 const DISPLAY_FONT = Platform.select({
@@ -295,10 +295,18 @@ export default function TaskFlowchart({
   plan,
   saving,
   onPlanChange,
+  title,
+  onDelete,
+  onComplete,
+  onEdit,
 }: {
   plan: KanbanPlan;
   saving: boolean;
   onPlanChange: (nextPlan: KanbanPlan) => Promise<void>;
+  title?: string;
+  onDelete?: () => void;
+  onComplete?: () => void;
+  onEdit?: () => void;
 }) {
   const sortedTasks = topoSort(plan.subtasks);
 
@@ -360,14 +368,28 @@ export default function TaskFlowchart({
     <View style={styles.shell}>
       {/* Header */}
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerTextWrap}>
           <Text style={styles.eyebrow}>TASK FLOWCHART</Text>
-          <Text style={styles.headerTitle}>Step-by-step plan</Text>
-        </View>
-        <View style={styles.progressPill}>
-          <Text style={styles.progressPillText}>
-            {completedCount}/{total} done
+          <Text style={styles.headerTitle} numberOfLines={2}>
+            {title || 'Step-by-step plan'}
           </Text>
+        </View>
+
+        <View style={styles.headerActions}>
+          <View style={styles.progressPill}>
+            <Text style={styles.progressPillText}>
+              {completedCount}/{total} done
+            </Text>
+          </View>
+          {onDelete && (
+            <TouchableOpacity
+              style={styles.trashCircle}
+              onPress={onDelete}
+              activeOpacity={0.7}
+            >
+              <Trash2 size={18} color="#8F3A2F" />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -423,6 +445,30 @@ export default function TaskFlowchart({
             ? '🎉 All steps complete!'
             : 'Tap a step to mark it complete.'}
       </Text>
+
+      {/* Footer Actions */}
+      <View style={styles.footer}>
+        {onEdit && (
+          <TouchableOpacity
+            style={styles.editButton}
+            onPress={onEdit}
+            activeOpacity={0.8}
+          >
+            <Pencil size={16} color="#4A6A5E" />
+            <Text style={styles.editButtonText}>Edit the chart</Text>
+          </TouchableOpacity>
+        )}
+        {onComplete && (
+          <TouchableOpacity
+            style={styles.completeButton}
+            onPress={onComplete}
+            activeOpacity={0.8}
+          >
+            <CheckCheck size={18} color="#F7F3EA" />
+            <Text style={styles.completeButtonText}>Mark Finished</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     </View>
   );
 }
@@ -444,19 +490,38 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    marginBottom: 14,
+    marginBottom: 16,
+    gap: 12,
+  },
+  headerTextWrap: {
+    flex: 1,
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  trashCircle: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#F5DDD7',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   eyebrow: {
     color: '#1B5A49',
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
     letterSpacing: 2,
+    textTransform: 'uppercase',
   },
   headerTitle: {
     color: '#102D24',
     fontFamily: DISPLAY_FONT,
-    fontSize: 26,
-    marginTop: 4,
+    fontSize: 24,
+    marginTop: 2,
+    lineHeight: 30,
   },
   progressPill: {
     backgroundColor: '#DDEFEA',
@@ -575,7 +640,42 @@ const styles = StyleSheet.create({
     color: '#7A8E87',
     fontSize: 12,
     textAlign: 'center',
-    marginTop: 16,
+    marginTop: 18,
     lineHeight: 18,
+  },
+  footer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 22,
+  },
+  editButton: {
+    flex: 1,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: '#E8EFEA',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  editButtonText: {
+    color: '#4A6A5E',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  completeButton: {
+    flex: 1.4,
+    height: 54,
+    borderRadius: 18,
+    backgroundColor: '#102D24',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  completeButtonText: {
+    color: '#F7F3EA',
+    fontSize: 14,
+    fontWeight: '700',
   },
 });
