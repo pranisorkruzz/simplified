@@ -56,7 +56,7 @@ export async function validateTaskInput(
   input: string,
 ): Promise<ValidationResult> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = 'gemini-2.5-flash-lite';
 
   if (!apiKey) {
     return { isValid: true, reason: '' };
@@ -223,7 +223,7 @@ function isFunctionUnavailableError(error: unknown) {
 
 async function requestGeminiFromClient(emailText: string): Promise<EmailBrief> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = 'gemini-2.5-flash';
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -386,7 +386,7 @@ export async function generateKanbanPlan({
   responses,
 }: KanbanGenerationArgs): Promise<KanbanPlan> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
+  const model = 'gemini-2.5-pro';
 
   if (!apiKey) {
     return buildFallbackKanbanPlan({ sourceTask, brief, responses });
