@@ -32,7 +32,6 @@ import {
 } from '@/lib/data';
 import {
   buildUserAiContext,
-  getFollowUpQuestions,
   readUserAiContextFromMetadata,
   UserAiContextResponse,
 } from '@/lib/ai-context';
@@ -76,10 +75,6 @@ export default function BriefsScreen() {
     active: 0,
     finished: 0,
   });
-  const followUpQuestions = getFollowUpQuestions(
-    profile?.user_type,
-    latestBrief?.suggestedFollowUpQuestions,
-  );
   const existingAiContext = readUserAiContextFromMetadata(user?.user_metadata);
 
   const applyBriefFeed = (feed: Awaited<ReturnType<typeof fetchBriefFeed>>) => {
@@ -590,7 +585,7 @@ export default function BriefsScreen() {
 
       <BriefFollowUpSheet
         visible={followUpVisible}
-        questions={followUpQuestions}
+        userTask={draftEmail}
         initialContext={existingAiContext}
         firstName={profile?.first_name}
         saving={savingFollowUp}

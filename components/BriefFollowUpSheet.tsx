@@ -19,6 +19,7 @@ import {
   UserAiContext,
   UserAiContextResponse,
 } from '@/lib/ai-context';
+import { generateNextFollowUpQuestion } from '@/lib/gemini';
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -32,43 +33,21 @@ type AnswerState = {
   otherText: string;
 };
 
-function buildInitialState(
-  questions: FollowUpQuestion[],
-  context: UserAiContext | null,
-) {
-  return questions.reduce<Record<string, AnswerState>>((acc, question) => {
-    const existing = context?.responses.find(
-      (response) => response.questionId === question.id,
-    );
-    const matchesOption = existing
-      ? question.options.includes(existing.answer)
-      : false;
-
-    acc[question.id] = {
-      answerSource: existing ? (matchesOption ? 'option' : 'other') : null,
-      answer: existing?.answer ?? '',
-      otherText: matchesOption ? '' : existing?.answer ?? '',
-    };
-
-    return acc;
-  }, {});
-}
-
 function isAnswerComplete(answer: AnswerState | undefined) {
   if (!answer?.answerSource) {
     return false;
   }
 
   if (answer.answerSource === 'other') {
-    return Boolean(answer.otherText.trim());
+    return Boolean(answer.otherText?.trim());
   }
 
-  return Boolean(answer.answer.trim());
+  return Boolean(answer.answer?.trim());
 }
 
 export default function BriefFollowUpSheet({
   visible,
-  questions,
+  userTask,
   initialContext,
   firstName,
   saving,
@@ -76,42 +55,67 @@ export default function BriefFollowUpSheet({
   onSave,
 }: {
   visible: boolean;
-  questions: FollowUpQuestion[];
+  userTask: string;
   initialContext: UserAiContext | null;
   firstName?: string | null;
   saving: boolean;
   onClose: () => void;
   onSave: (responses: UserAiContextResponse[]) => Promise<void>;
 }) {
+  const [questions, setQuestions] = useState<FollowUpQuestion[]>([]);
   const [answers, setAnswers] = useState<Record<string, AnswerState>>({});
   const [sheetError, setSheetError] = useState('');
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [loadingQuestion, setLoadingQuestion] = useState(false);
   const insets = useSafeAreaInsets();
+
+  const fetchNextQuestion = async (
+    qNumber: number,
+    currentAnswers: UserAiContextResponse[],
+  ) => {
+    setLoadingQuestion(true);
+    try {
+      const nextQ = await generateNextFollowUpQuestion(
+        userTask,
+        qNumber,
+        currentAnswers,
+      );
+      if (nextQ) {
+        setQuestions((prev) => {
+          // Prevent duplicates if already fetched
+          if (prev.some((q) => q.id === nextQ.id)) return prev;
+          return [...prev, nextQ];
+        });
+      } else {
+        setSheetError('Failed to generate the next question. Please try again.');
+      }
+    } catch (err) {
+      console.error('Fetch question error:', err);
+      setSheetError('Something went wrong. Please check your connection.');
+    } finally {
+      setLoadingQuestion(false);
+    }
+  };
 
   useEffect(() => {
     if (!visible) {
+      setQuestions([]);
+      setAnswers({});
+      setCurrentIndex(0);
       return;
     }
 
-    const initialAnswers = buildInitialState(questions, initialContext);
-    const firstIncompleteIndex = questions.findIndex(
-      (question) => !isAnswerComplete(initialAnswers[question.id]),
-    );
-
-    setAnswers(initialAnswers);
-    setCurrentIndex(
-      firstIncompleteIndex >= 0
-        ? firstIncompleteIndex
-        : Math.max(questions.length - 1, 0),
-    );
-    setSheetError('');
-  }, [initialContext, questions, visible]);
+    // Load Question 1 when visible
+    if (questions.length === 0 && !loadingQuestion) {
+      void fetchNextQuestion(1, []);
+    }
+  }, [visible]);
 
   const headerName = firstName?.trim() || 'you';
   const currentQuestion = questions[currentIndex];
   const currentAnswer = currentQuestion ? answers[currentQuestion.id] : undefined;
   const currentIsComplete = isAnswerComplete(currentAnswer);
-  const totalQuestions = questions.length;
+  const totalQuestions = 5; // Fixed at 5 as per requirements
   const isLastQuestion = currentIndex === totalQuestions - 1;
   const answeredCount = useMemo(
     () =>
@@ -171,13 +175,24 @@ export default function BriefFollowUpSheet({
     }
 
     if (!isLastQuestion) {
-      setCurrentIndex((prev) => prev + 1);
-      setSheetError('');
-      return;
-    }
+      const nextIndex = currentIndex + 1;
+      const currentResponses = questions.map((q) => {
+        const ans = answers[q.id];
+        return {
+          questionId: q.id,
+          question: q.question,
+          answer: ans.answerSource === 'other' ? ans.otherText : ans.answer,
+          answerSource: ans.answerSource === 'other' ? 'other' : 'option',
+        } as UserAiContextResponse;
+      });
 
-    if (answeredCount !== totalQuestions) {
-      setSheetError(`Answer all ${totalQuestions} questions before continuing.`);
+      // Fetch next question if we don't have it yet
+      if (questions.length <= nextIndex) {
+        await fetchNextQuestion(nextIndex + 1, currentResponses);
+      }
+      
+      setCurrentIndex(nextIndex);
+      setSheetError('');
       return;
     }
 
@@ -256,66 +271,80 @@ export default function BriefFollowUpSheet({
                 >
                   <View style={styles.questionBlock}>
                     <Text style={styles.questionEyebrow}>{`QUESTION ${currentIndex + 1}`}</Text>
-                    <Text style={styles.questionText}>{currentQuestion.question}</Text>
+                    
+                    {loadingQuestion ? (
+                      <View style={styles.loadingQuestionBox}>
+                        <ActivityIndicator size="large" color="#1B5A49" />
+                        <Text style={styles.loadingQuestionText}>Consulting Clarix for the best follow-up...</Text>
+                      </View>
+                    ) : currentQuestion ? (
+                      <>
+                        <Text style={styles.questionText}>{currentQuestion.question}</Text>
 
-                    <View style={styles.optionWrap}>
-                      {currentQuestion.options.map((option) => {
-                        const selected =
-                          currentAnswer?.answerSource === 'option' &&
-                          currentAnswer.answer === option;
+                        <View style={styles.optionWrap}>
+                          {currentQuestion.options.map((option) => {
+                            const selected =
+                              currentAnswer?.answerSource === 'option' &&
+                              currentAnswer.answer === option;
 
-                        return (
+                            return (
+                              <TouchableOpacity
+                                key={option}
+                                style={[
+                                  styles.optionChip,
+                                  selected && styles.optionChipSelected,
+                                ]}
+                                onPress={() => selectOption(currentQuestion.id, option)}
+                                activeOpacity={0.85}
+                              >
+                                <Text
+                                  style={[
+                                    styles.optionChipText,
+                                    selected && styles.optionChipTextSelected,
+                                  ]}
+                                >
+                                  {option}
+                                </Text>
+                              </TouchableOpacity>
+                            );
+                          })}
+
                           <TouchableOpacity
-                            key={option}
                             style={[
                               styles.optionChip,
-                              selected && styles.optionChipSelected,
+                              otherSelected && styles.optionChipSelected,
                             ]}
-                            onPress={() => selectOption(currentQuestion.id, option)}
+                            onPress={() => selectOther(currentQuestion.id)}
                             activeOpacity={0.85}
                           >
                             <Text
                               style={[
                                 styles.optionChipText,
-                                selected && styles.optionChipTextSelected,
+                                otherSelected && styles.optionChipTextSelected,
                               ]}
                             >
-                              {option}
+                              {currentQuestion.otherLabel}
                             </Text>
                           </TouchableOpacity>
-                        );
-                      })}
+                        </View>
 
-                      <TouchableOpacity
-                        style={[
-                          styles.optionChip,
-                          otherSelected && styles.optionChipSelected,
-                        ]}
-                        onPress={() => selectOther(currentQuestion.id)}
-                        activeOpacity={0.85}
-                      >
-                        <Text
-                          style={[
-                            styles.optionChipText,
-                            otherSelected && styles.optionChipTextSelected,
-                          ]}
-                        >
-                          {currentQuestion.otherLabel}
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-
-                    {otherSelected ? (
-                      <TextInput
-                        style={styles.otherInput}
-                        value={currentAnswer?.otherText ?? ''}
-                        onChangeText={(text) => updateOtherText(currentQuestion.id, text)}
-                        placeholder="Write your own answer"
-                        placeholderTextColor="#7B8A83"
-                        returnKeyType="done"
-                        onSubmitEditing={handlePrimaryPress}
-                      />
-                    ) : null}
+                        {otherSelected ? (
+                          <TextInput
+                            style={styles.otherInput}
+                            value={currentAnswer?.otherText ?? ''}
+                            onChangeText={(text) => updateOtherText(currentQuestion.id, text)}
+                            placeholder="Write your own answer"
+                            placeholderTextColor="#7B8A83"
+                            returnKeyType="done"
+                            onSubmitEditing={handlePrimaryPress}
+                          />
+                        ) : null}
+                      </>
+                    ) : (
+                      <View style={styles.errorBanner}>
+                        <Text style={styles.errorText}>No question available. Please try again.</Text>
+                      </View>
+                    )}
                   </View>
 
                   {sheetError ? (
@@ -351,7 +380,7 @@ export default function BriefFollowUpSheet({
                       <ActivityIndicator size="small" color="#F7F3EA" />
                     ) : (
                       <Text style={styles.primaryButtonText}>
-                        {isLastQuestion ? 'Generate Kanban' : 'Continue'}
+                        {isLastQuestion ? 'Generate Kanban' : (loadingQuestion ? 'Loading...' : 'Continue')}
                       </Text>
                     )}
                   </TouchableOpacity>
@@ -469,6 +498,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: DISPLAY_FONT,
     lineHeight: 30,
+  },
+  loadingQuestionBox: {
+    paddingVertical: 40,
+    alignItems: 'center',
+    gap: 16,
+  },
+  loadingQuestionText: {
+    color: '#5A6A63',
+    fontSize: 14,
+    textAlign: 'center',
+    fontStyle: 'normal',
   },
   optionWrap: {
     flexDirection: 'row',

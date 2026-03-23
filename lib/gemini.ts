@@ -11,6 +11,7 @@ import {
   buildAiContextPrompt,
   readUserAiContextFromMetadata,
   UserAiContextResponse,
+  FollowUpQuestion,
 } from '@/lib/ai-context';
 import { Alert } from 'react-native';
 import {
@@ -98,7 +99,13 @@ Input to validate: ${input}`;
 
     if (!response.ok) {
       console.error('Validation API error:', response.status);
-      return { isValid: true, reason: '' };
+      if (response.status === 429) {
+        return {
+          isValid: false,
+          reason: 'Service is busy. Please wait a moment and try again.',
+        };
+      }
+      return { isValid: false, reason: 'Validation failed. Please try again.' };
     }
 
     const data = (await response.json()) as GeminiResponse;
@@ -223,7 +230,7 @@ function isFunctionUnavailableError(error: unknown) {
 
 async function requestGeminiFromClient(emailText: string): Promise<EmailBrief> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = 'gemini-2.5-flash';
+  const model = 'gemini-2.5-pro';
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -246,15 +253,7 @@ Return strict JSON only with this exact shape:
   "timeLabel": "explicit meeting time if present, otherwise No set time",
   "deadlineAt": "ISO 8601 datetime if a clear deadline exists, otherwise null",
   "priority": "high" | "medium" | "low",
-  "actionItems": ["small step", "small step", "small step"],
-  "suggestedFollowUpQuestions": [
-    {
-      "id": "unique_id_string",
-      "question": "Specific question about the context of this email",
-      "options": ["Option A", "Option B", "Option C"],
-      "otherLabel": "Other"
-    }
-  ]
+  "actionItems": ["small step", "small step", "small step"]
 }
 
 Rules:
@@ -269,8 +268,6 @@ Rules:
 - Start each action item with a verb.
 - Do not wrap the JSON in markdown fences.
 - Extract the most important next action, not every possible task.
-- suggestedFollowUpQuestions must contain 3 to 4 questions that help Clarix understand the user's specific context, preferences, or stakes related to THIS EMAIL.
-- Questions should be probing but helpful (e.g., "How critical is this client to your current quarterly goals?" or "What is your preferred tone for this type of follow-up?").
 ${userContextPrompt}
 
 Email:
@@ -311,8 +308,89 @@ ${emailText}`;
     const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
     return parseEmailBrief(raw) ?? buildFallbackBrief(emailText);
-  } catch {
+  } catch (error) {
+    console.error('requestGeminiFromClient error:', error);
     return buildFallbackBrief(emailText);
+  }
+}
+
+export async function generateNextFollowUpQuestion(
+  userTask: string,
+  questionNumber: number,
+  previousAnswers: UserAiContextResponse[],
+): Promise<FollowUpQuestion | null> {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  const model = 'gemini-2.5-flash';
+
+  if (!apiKey) return null;
+
+  const stageHints = [
+    'Scope/Goal (what exactly do you want to achieve?)',
+    'Target Audience or who is it for?',
+    'Timeline or deadline?',
+    'Resources or constraints available?',
+    'Specific requirements or preferences?',
+  ];
+
+  const stageInfo = stageHints[questionNumber - 1] || 'Specific requirements';
+  const previousContext = previousAnswers.length > 0 
+    ? previousAnswers.map(pa => `Q: ${pa.question}\nA: ${pa.answer}`).join('\n\n')
+    : 'None yet.';
+
+  const prompt = `You are an expert project consultant. Your job is to ask smart, specific follow up questions about the user's task to gather maximum context for planning.
+
+Rules:
+- Ask ONE question at a time
+- Each question must be directly related to: ${userTask}
+- Questions must follow logical order from broad to specific
+- Never repeat similar questions
+- Keep questions short and clear
+- Sound like a smart human consultant, not a robot
+
+STRICT JSON ONLY:
+{
+  "id": "q_${questionNumber}",
+  "question": "Your single specific question here",
+  "options": ["Option 1", "Option 2", "Option 3"],
+  "otherLabel": "Other"
+}
+
+Current question number: ${questionNumber}
+Focus area: ${stageInfo}
+Previous answers so far:
+${previousContext}
+
+User task: ${userTask}
+
+Ask question number ${questionNumber} now.`;
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            temperature: 0.7,
+            responseMimeType: 'application/json',
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) return null;
+
+    const data = await response.json();
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const clean = sanitizeJsonBlock(raw);
+    return JSON.parse(clean) as FollowUpQuestion;
+  } catch (error) {
+    console.error('generateNextFollowUpQuestion error:', error);
+    return null;
   }
 }
 
