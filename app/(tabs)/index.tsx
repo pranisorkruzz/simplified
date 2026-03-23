@@ -44,6 +44,8 @@ import BriefCardItem from '@/components/BriefCard';
 import BriefFollowUpSheet from '@/components/BriefFollowUpSheet';
 import BriefsHero from '@/components/BriefsHero';
 import BriefComposer from '@/components/BriefComposer';
+import { validateTaskInput } from '@/lib/gemini';
+import { Alert as RNAlert } from 'react-native';
 
 const DISPLAY_FONT = Platform.select({
   ios: 'Georgia',
@@ -172,6 +174,26 @@ export default function BriefsScreen() {
 
     try {
       const sourceEmail = draftEmail.trim();
+
+      // NEW: Validate task input first
+      const validation = await validateTaskInput(sourceEmail);
+      console.log("IS VALID:", validation.isValid);
+      console.log("STOPPING HERE IF FALSE:", !validation.isValid);
+
+      if (!validation.isValid) {
+        const title = "Not a Valid Task";
+        const message = validation.reason || "Please enter a clear actionable task like 'Build a mobile app' or 'Plan my marketing strategy'";
+
+        if (Platform.OS === 'web') {
+          globalThis.alert(`${title}\n\n${message}`);
+        } else {
+          RNAlert.alert(title, message, [{ text: 'Try Again' }]);
+        }
+        return; // ← THIS IS CRITICAL - must stop here
+      }
+
+      console.log("REACHED FOLLOW UP - TASK IS VALID");
+
       const { brief, assistantChat } = await createBriefFromEmail(sourceEmail);
 
       const newBrief = {

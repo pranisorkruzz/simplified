@@ -12,6 +12,7 @@ import {
   readUserAiContextFromMetadata,
   UserAiContextResponse,
 } from '@/lib/ai-context';
+import { Alert } from 'react-native';
 import {
   getSupabaseErrorMessage,
   isMissingColumnError,
@@ -43,20 +44,88 @@ type GeminiErrorResponse = {
 };
 
 function sanitizeJsonBlock(raw: string): string {
-  const fenced = raw
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
+  return raw.replace(/```json|```/g, '').trim();
+}
 
-  const start = fenced.indexOf('{');
-  const end = fenced.lastIndexOf('}');
+export type ValidationResult = {
+  isValid: boolean;
+  reason: string;
+};
 
-  if (start >= 0 && end > start) {
-    return fenced.slice(start, end + 1);
+export async function validateTaskInput(
+  input: string,
+): Promise<ValidationResult> {
+  const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
+  const model = process.env.EXPO_PUBLIC_GEMINI_MODEL || 'gemini-2.5-flash';
+
+  if (!apiKey) {
+    return { isValid: true, reason: '' };
   }
 
-  return fenced;
+  const prompt = `You are a strict task validator. YOU MUST ONLY RESPOND WITH RAW JSON. NO OTHER TEXT WHATSOEVER.
+Return exactly: {"isValid": true, "reason": "short reason why"} or {"isValid": false, "reason": "short reason why"}
+
+A valid task is an actionable goal a person wants to achieve.
+INVALID examples: hello, hi, asdf, 123, what is weather, I love pizza, dog, car
+VALID examples: build a mobile app, plan my marketing strategy, learn React Native, write a marketing plan, send an email to the team
+
+Input to validate: ${input}`;
+
+  console.log('--- VALIDATION START ---');
+  console.log('Input:', input);
+
+  try {
+    const response = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [{ text: prompt }],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.1,
+            responseMimeType: 'application/json',
+          },
+        }),
+      },
+    );
+
+    if (!response.ok) {
+      console.error('Validation API error:', response.status);
+      return { isValid: true, reason: '' };
+    }
+
+    const data = (await response.json()) as GeminiResponse;
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    console.log('Raw AI Response:', raw);
+
+    try {
+      const clean = sanitizeJsonBlock(raw);
+      const parsed = JSON.parse(clean) as ValidationResult;
+      console.log('Parsed Result:', parsed);
+      console.log('--- VALIDATION END ---');
+
+      return {
+        isValid: parsed.isValid ?? true,
+        reason: parsed.reason ?? '',
+      };
+    } catch (parseError) {
+      console.error('JSON Parse Error:', parseError);
+      console.log('--- VALIDATION END (PARSE ERROR) ---');
+      // If we cant parse, default to INVALID to be safe as requested
+      return { isValid: false, reason: 'Could not parse validation response' };
+    }
+  } catch (error) {
+    console.error('Validation Processing Error:', error);
+    console.log('--- VALIDATION END (ERROR) ---');
+    return { isValid: true, reason: '' };
+  }
 }
 
 type KanbanGenerationArgs = {
