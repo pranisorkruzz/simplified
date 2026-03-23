@@ -20,6 +20,11 @@ import {
   supabase,
 } from '@/lib/supabase';
 
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+];
+
 type CreatedBriefResponse = {
   brief: EmailBrief;
   assistantChat: {
@@ -230,17 +235,14 @@ function isFunctionUnavailableError(error: unknown) {
 
 async function requestGeminiFromClient(emailText: string): Promise<EmailBrief> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = 'gemini-2.5-pro';
+  if (!apiKey) return buildFallbackBrief(emailText);
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
   const userContextPrompt = buildAiContextPrompt(
     readUserAiContextFromMetadata(user?.user_metadata),
   );
-
-  if (!apiKey) {
-    return buildFallbackBrief(emailText);
-  }
 
   const prompt = `You turn email content into one clear task card for a mobile app.
 
@@ -273,45 +275,39 @@ ${userContextPrompt}
 Email:
 ${emailText}`;
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+          }),
         },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
-            },
-          ],
-        }),
-      },
-    );
+      );
 
-    if (!response.ok) {
-      const errorText = await response.text();
+      if (response.status === 429) {
+        console.warn(`Model ${model} rate limited (429). Retrying with next available model...`);
+        continue;
+      }
 
-      try {
-        const errorData = JSON.parse(errorText) as GeminiErrorResponse;
-        throw new Error(
-          errorData.error?.message || `Gemini API error (${response.status})`,
-        );
-      } catch {
+      if (!response.ok) {
+        const errorText = await response.text();
         throw new Error(errorText || `Gemini API error (${response.status})`);
       }
+
+      const data = (await response.json()) as GeminiResponse;
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      return parseEmailBrief(raw) ?? buildFallbackBrief(emailText);
+    } catch (error) {
+      console.error(`Error with model ${model}:`, error);
+      if (model === GEMINI_MODELS[GEMINI_MODELS.length - 1]) break;
     }
-
-    const data = (await response.json()) as GeminiResponse;
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-
-    return parseEmailBrief(raw) ?? buildFallbackBrief(emailText);
-  } catch (error) {
-    console.error('requestGeminiFromClient error:', error);
-    return buildFallbackBrief(emailText);
   }
+
+  return buildFallbackBrief(emailText);
 }
 
 export async function generateNextFollowUpQuestion(
@@ -320,8 +316,6 @@ export async function generateNextFollowUpQuestion(
   previousAnswers: UserAiContextResponse[],
 ): Promise<FollowUpQuestion | null> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = 'gemini-2.5-flash';
-
   if (!apiKey) return null;
 
   const stageHints = [
@@ -364,34 +358,41 @@ User task: ${userTask}
 
 Ask question number ${questionNumber} now.`;
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.7,
+              responseMimeType: 'application/json',
+            },
+          }),
         },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: {
-            temperature: 0.7,
-            responseMimeType: 'application/json',
-          },
-        }),
-      },
-    );
+      );
 
-    if (!response.ok) return null;
+      if (response.status === 429) {
+        console.warn(`Model ${model} rate limited (429) in generateNextFollowUpQuestion. Retrying...`);
+        continue;
+      }
 
-    const data = await response.json();
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const clean = sanitizeJsonBlock(raw);
-    return JSON.parse(clean) as FollowUpQuestion;
-  } catch (error) {
-    console.error('generateNextFollowUpQuestion error:', error);
-    return null;
+      if (!response.ok) return null;
+
+      const data = await response.json();
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const clean = sanitizeJsonBlock(raw);
+      return JSON.parse(clean) as FollowUpQuestion;
+    } catch (error) {
+      console.error(`Error in generateNextFollowUpQuestion with ${model}:`, error);
+      if (model === GEMINI_MODELS[GEMINI_MODELS.length - 1]) break;
+    }
   }
+
+  return null;
 }
 
 async function insertBriefRows(
@@ -464,11 +465,7 @@ export async function generateKanbanPlan({
   responses,
 }: KanbanGenerationArgs): Promise<KanbanPlan> {
   const apiKey = process.env.EXPO_PUBLIC_GEMINI_API_KEY;
-  const model = 'gemini-2.5-pro';
-
-  if (!apiKey) {
-    return buildFallbackKanbanPlan({ sourceTask, brief, responses });
-  }
+  if (!apiKey) return buildFallbackKanbanPlan({ sourceTask, brief, responses });
 
   const prompt = `You are generating a kanban flowchart for a mobile app.
 
@@ -523,55 +520,45 @@ Rules:
 - "order" is the vertical/logical sequence, starting at 0.
 - Do not include markdown fences or any commentary.`;
 
-  try {
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          contents: [
-            {
-              parts: [{ text: prompt }],
+  for (const model of GEMINI_MODELS) {
+    try {
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }],
+            generationConfig: {
+              temperature: 0.2,
+              responseMimeType: "application/json",
             },
-          ],
-          generationConfig: {
-            temperature: 0.2,
-            responseMimeType: "application/json",
-          },
-        }),
-      },
-    );
+          }),
+        },
+      );
 
-    if (!response.ok) {
-      const errorText = await response.text();
+      if (response.status === 429) {
+        console.warn(`Model ${model} rate limited (429) in generateKanbanPlan. Retrying...`);
+        continue;
+      }
 
-      try {
-        const errorData = JSON.parse(errorText) as GeminiErrorResponse;
-        throw new Error(
-          errorData.error?.message || `Gemini API error (${response.status})`,
-        );
-      } catch {
+      if (!response.ok) {
+        const errorText = await response.text();
         throw new Error(errorText || `Gemini API error (${response.status})`);
       }
+
+      const data = (await response.json()) as GeminiResponse;
+      const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+      const parsed = parseKanbanPlan(raw ? JSON.parse(sanitizeJsonBlock(raw)) : null);
+
+      if (parsed) return parsed;
+    } catch (error) {
+      console.error(`Error in generateKanbanPlan with ${model}:`, error);
+      if (model === GEMINI_MODELS[GEMINI_MODELS.length - 1]) break;
     }
-
-    const data = (await response.json()) as GeminiResponse;
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-    const parsed = parseKanbanPlan(
-      raw ? JSON.parse(sanitizeJsonBlock(raw)) : null,
-    );
-
-    if (parsed) {
-      return parsed;
-    }
-
-    return buildFallbackKanbanPlan({ sourceTask, brief, responses });
-  } catch {
-    return buildFallbackKanbanPlan({ sourceTask, brief, responses });
   }
+
+  return buildFallbackKanbanPlan({ sourceTask, brief, responses });
 }
 
 export async function createBriefFromEmail(
