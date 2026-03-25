@@ -1,52 +1,35 @@
-# Project Context
+# App: Clarix
 
-## App Name
-[Your App Name]
+AI-powered task management app that breaks tasks into visual steps.
 
-## What This App Does
-Task management app where users input a task → AI asks 5 
-follow up questions according to the inputted task to get more context  → generates a visual flowchart showing 
-task breakdown → each node is tappable and opens a bottom 
-sheet with a Kansan style and chatbot for that subtask → user can mark 
-subtasks as done.
+## Features
+- User inputs a task → AI validates it
+- AI asks 5 follow-up questions one by one
+- Generates a visual flowchart (JSON) as task breakdown
+- Each flowchart node is tappable → opens bottom sheet
+- Bottom sheet has Kanban board + chatbot per subtask
+- User marks subtasks done → turns green → saves to Supabase
 
 ## Tech Stack
 - React Native + Expo
 - Supabase (auth + database + edge functions)
 - TypeScript
-- Gemini 2.5 Flash API (validation + follow up questions)
-- Gemini 2.5 Pro (flowchart generation)
-- AsyncStorage (local data persistence)
+- Gemini API
+- AsyncStorage
 
-## App Flow
-1. User inputs task in Briefs tab
-2. AI validates if input is a real task
-3. AI asks 5 follow up questions one by one
-4. AI generates flowchart as JSON
-5. Flowchart renders visually with nodes and arrows
-6. User taps node → bottom sheet opens with chatbot
-7. User marks node as done → turns green → saves to Supabase
+## Structure
+- `app/(tabs)/` — Briefs, Tasks, Profile tabs
+- `components/` — BriefComposer, BriefCard, BriefKanbanBoard, TaskFlowchart, BriefFollowUpSheet, TaskCard
+- `lib/` — gemini.ts, briefs.ts, auth.ts, supabase.ts
+- `contexts/` — AuthContext, KanbanContext
+- `supabase/functions/` — edge functions
 
-
-## Design Rules
-- Match existing font and color scheme throughout
-- No italic fonts anywhere in the app
-- Friendly, clean minimal UI
-- Works on both iOS and Android
-- All screens use KeyboardAvoidingView
-
-## Coding Rules
-- Always match existing font and color scheme
-- Never break existing functionality
-- Use TypeScript strictly
-- Save all user data to Supabase
-- Handle all errors with user friendly messages
-- Always use AsyncStorage for local persistence
-- Never add new dependencies without asking first
+## Rules
+- Match existing font and color scheme
+- No italic fonts
+- TypeScript strictly
+- Save to Supabase + AsyncStorage
+- Never add dependencies without asking
 - Never change navigation structure
-
-## Known Issues Fixed
-- Personal info screen now saves with AsyncStorage
-- Keyboard dismiss fixed across all screens
-- Task validation blocks gibberish/greetings
-- Profile saves using upsert not update
+- All screens use KeyboardAvoidingView
+- Friendly, clean, minimal UI
